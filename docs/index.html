@@ -316,14 +316,15 @@
 
     /* ── Diagram demo ──────────────────────────────────────────── */
     #demo { padding: 100px 0; background: linear-gradient(to bottom, transparent, rgba(31,111,235,.04), transparent); }
-    .demo-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 48px;
-      align-items: center;
+    .demo-header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 20px;
       margin-top: 56px;
+      margin-bottom: 20px;
     }
-    @media (max-width: 768px) { .demo-grid { grid-template-columns: 1fr; } }
     .demo-tabs {
       display: flex;
       gap: 4px;
@@ -331,13 +332,12 @@
       border: 1px solid var(--border);
       border-radius: 8px;
       padding: 4px;
-      width: fit-content;
-      margin-bottom: 20px;
     }
     .demo-tab {
-      padding: 6px 16px;
+      padding: 8px 20px;
       border-radius: 6px;
       font-size: 13px;
+      font-weight: 500;
       cursor: pointer;
       color: var(--muted);
       transition: all .2s;
@@ -353,18 +353,39 @@
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 24px;
+      padding: 32px 40px;
       overflow: auto;
-      min-height: 320px;
+      min-height: 460px;
       display: flex;
       align-items: center;
       justify-content: center;
+      width: 100%;
     }
-    .demo-desc h3 { font-size: 24px; font-weight: 700; margin-bottom: 14px; }
-    .demo-desc p  { font-size: 15px; color: var(--muted); line-height: 1.7; margin-bottom: 20px; }
-    .demo-list { list-style: none; display: flex; flex-direction: column; gap: 12px; }
-    .demo-list li { display: flex; gap: 10px; font-size: 14px; color: var(--muted); }
-    .demo-list li::before { content: '→'; color: var(--blue); flex-shrink: 0; }
+    /* Force Mermaid SVG to fill available width */
+    .mermaid-wrap .mermaid { width: 100%; }
+    .mermaid-wrap svg {
+      width: 100% !important;
+      max-width: 100% !important;
+      height: auto !important;
+      min-height: 380px;
+    }
+    .demo-bullets {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 16px;
+      margin-top: 28px;
+    }
+    .demo-bullet {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 20px;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .demo-bullet-icon { color: var(--blue); font-size: 18px; flex-shrink: 0; margin-top: 2px; }
+    .demo-bullet p { font-size: 13px; color: var(--muted); line-height: 1.6; }
 
     /* ── Levels ────────────────────────────────────────────────── */
     #levels { padding: 100px 0; }
@@ -664,15 +685,18 @@
       <p class="section-sub">Real Mermaid output from a sample microservices repo — no configuration required.</p>
     </div>
 
-    <div class="demo-grid reveal">
-      <div>
+    <div class="reveal">
+      <div class="demo-header">
+        <div style="font-size:15px;color:var(--muted)">Click a tab to switch diagram level</div>
         <div class="demo-tabs">
-          <button class="demo-tab active" onclick="showDiagram('l1',this)">L1 Modules</button>
-          <button class="demo-tab" onclick="showDiagram('l2',this)">L2 Components</button>
-          <button class="demo-tab" onclick="showDiagram('l3',this)">L3 Flow</button>
+          <button class="demo-tab active" onclick="showDiagram('l1',this)">L1 &nbsp;Modules</button>
+          <button class="demo-tab" onclick="showDiagram('l2',this)">L2 &nbsp;Components</button>
+          <button class="demo-tab" onclick="showDiagram('l3',this)">L3 &nbsp;Flow</button>
         </div>
-        <div class="mermaid-wrap" id="diagramWrap">
-          <div class="mermaid" id="diagramEl">flowchart LR
+      </div>
+
+      <div class="mermaid-wrap" id="diagramWrap">
+        <div class="mermaid" id="diagramEl">flowchart LR
   subgraph API["API Layer"]
     gateway["API Gateway"]
   end
@@ -692,19 +716,26 @@
   orders --> db
   payments --> db
   inventory --> cache
-          </div>
         </div>
       </div>
 
-      <div class="demo-desc">
-        <h3>Four levels of detail</h3>
-        <p>ArchiLens generates a complete set of diagrams for every level of abstraction — from the 30,000-foot system view down to individual class interactions and sequence flows.</p>
-        <ul class="demo-list">
-          <li>Modules are detected automatically from directory structure and imports</li>
-          <li>AI assigns a one-line business capability to each module</li>
-          <li>Dependency edges are derived from actual import statements, not guesses</li>
-          <li>Click any node in the viewer to drill into the next level</li>
-        </ul>
+      <div class="demo-bullets">
+        <div class="demo-bullet">
+          <span class="demo-bullet-icon">→</span>
+          <p>Modules detected automatically from directory structure and import analysis</p>
+        </div>
+        <div class="demo-bullet">
+          <span class="demo-bullet-icon">→</span>
+          <p>AI assigns a one-line business capability label to every module</p>
+        </div>
+        <div class="demo-bullet">
+          <span class="demo-bullet-icon">→</span>
+          <p>Dependency edges come from real import statements — not guesses</p>
+        </div>
+        <div class="demo-bullet">
+          <span class="demo-bullet-icon">→</span>
+          <p>Click any node in the interactive viewer to drill into the next level</p>
+        </div>
       </div>
     </div>
   </div>
