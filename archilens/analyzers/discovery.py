@@ -9,10 +9,17 @@ modules based on directory structure.
 from __future__ import annotations
 
 import fnmatch
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from archilens.config import ArchiLensConfig
+
+logger = logging.getLogger(__name__)
+
+# Hard cap: warn above this, stop collecting above the hard limit.
+_WARN_FILE_COUNT = 5_000
+_MAX_FILE_COUNT = 20_000
 
 # Mapping: file extension -> language name
 EXTENSION_MAP: dict[str, str] = {
@@ -131,7 +138,22 @@ def discover_files(
             is_test=is_test,
         )
         files.append(source_file)
-        
+
+        if len(files) == _WARN_FILE_COUNT:
+            logger.warning(
+                "Discovered %d source files — this is a large repo. "
+                "Analysis may be slow. Use 'analysis.exclude' in .archilens.yml "
+                "to narrow scope, or '--level 1' to skip component-level detail.",
+                _WARN_FILE_COUNT,
+            )
+        if len(files) >= _MAX_FILE_COUNT:
+            logger.warning(
+                "Reached the %d file limit — stopping discovery. "
+                "Results will be partial. Add more paths to 'analysis.exclude'.",
+                _MAX_FILE_COUNT,
+            )
+            break
+
         # Build module registry
         if module_name not in modules:
             modules[module_name] = Module(name=module_name, path=module_name)
@@ -139,10 +161,10 @@ def discover_files(
         mod.files.append(source_file)
         mod.total_lines += line_count
         mod.languages.add(language)
-    
+
     # Resolve sub-module relationships
     _resolve_submodules(modules)
-    
+
     return files, modules
 
 

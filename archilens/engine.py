@@ -74,7 +74,7 @@ def analyze_repository(
     
     # Stage 3: Static Analysis
     logger.info("Stage 3: Analyzing dependencies...")
-    nodes, edges, graph = analyze_dependencies(files, modules, repo_path)
+    nodes, edges, graph = _analyze_with_progress(files, modules, repo_path)
     logger.info(f"  Built graph: {len(nodes)} nodes, {len(edges)} edges")
     
     # Compute metrics
@@ -179,6 +179,36 @@ def run_full_pipeline(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _analyze_with_progress(files, modules, repo_path):
+    """Run dependency analysis with a rich progress bar for large repos."""
+    from archilens.analyzers.dependencies import analyze_dependencies
+
+    # Only show the progress bar for repos with enough files to matter
+    if len(files) < 100:
+        return analyze_dependencies(files, modules, repo_path)
+
+    try:
+        from rich.progress import Progress, SpinnerColumn, BarColumn, TaskProgressColumn, TextColumn
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TextColumn("[dim]{task.fields[detail]}"),
+            transient=True,
+        ) as progress:
+            task = progress.add_task(
+                "Analyzing dependencies...", total=len(files), detail=""
+            )
+
+            def _on_file(relative_path: str) -> None:
+                progress.update(task, advance=1, detail=relative_path[-40:])
+
+            return analyze_dependencies(files, modules, repo_path, progress_cb=_on_file)
+    except ImportError:
+        return analyze_dependencies(files, modules, repo_path)
+
 
 def _apply_capability_mappings(
     snapshot: ArchSnapshot,

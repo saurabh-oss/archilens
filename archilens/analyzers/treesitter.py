@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 _LANGUAGES: dict[str, Any] = {}   # language_name -> Language object
 _PARSERS: dict[str, Any] = {}     # language_name -> Parser object
+_FALLBACK_WARNED: set[str] = set()  # languages already warned about
 
 
 def _get_lang_parser(language: str) -> Optional[tuple[Any, Any]]:
@@ -69,7 +70,13 @@ def _get_lang_parser(language: str) -> Optional[tuple[Any, Any]]:
         return lang_obj, parser
 
     except (ImportError, AttributeError, Exception) as exc:
-        logger.debug("Tree-sitter unavailable for %s: %s", language, exc)
+        if language not in _FALLBACK_WARNED:
+            _FALLBACK_WARNED.add(language)
+            logger.warning(
+                "tree-sitter grammar for '%s' unavailable (%s) — falling back to regex. "
+                "For better accuracy install: pip install tree-sitter-%s",
+                language, exc, language,
+            )
         return None
 
 

@@ -123,41 +123,56 @@ def analyze_dependencies(
     files: list[SourceFile],
     modules: dict[str, Module],
     repo_path: str | Path,
+    progress_cb=None,
 ) -> tuple[list[ArchNode], list[ArchEdge], nx.DiGraph]:
     """
     Analyze all source files and build the architecture graph.
-    
+
+    Args:
+        files:       All discovered source files.
+        modules:     Module registry from discovery.
+        repo_path:   Repository root path.
+        progress_cb: Optional callable(relative_path) called after each file.
+
     Returns:
         Tuple of (nodes, edges, NetworkX directed graph)
     """
     repo_path = Path(repo_path).resolve()
-    
+
     # Phase 1: Extract imports, classes, functions from all files
     all_imports: list[ImportInfo] = []
     all_classes: list[ClassInfo] = []
     all_functions: list[FunctionInfo] = []
-    
+
     for source_file in files:
         if source_file.is_test:
+            if progress_cb:
+                progress_cb(source_file.relative_path)
             continue
-        
+
         try:
             content = source_file.path.read_text(encoding="utf-8", errors="ignore")
         except OSError:
-            logger.warning(f"Cannot read {source_file.relative_path}")
+            logger.warning("Cannot read %s — skipping", source_file.relative_path)
+            if progress_cb:
+                progress_cb(source_file.relative_path)
             continue
-        
-        # Extract imports
-        imports = _extract_imports(content, source_file)
-        all_imports.extend(imports)
-        
-        # Extract classes
-        classes = _extract_classes(content, source_file)
-        all_classes.extend(classes)
-        
-        # Extract functions
-        functions = _extract_functions(content, source_file)
-        all_functions.extend(functions)
+
+        try:
+            imports = _extract_imports(content, source_file)
+            all_imports.extend(imports)
+            classes = _extract_classes(content, source_file)
+            all_classes.extend(classes)
+            functions = _extract_functions(content, source_file)
+            all_functions.extend(functions)
+        except Exception as exc:
+            logger.warning(
+                "Error analysing %s — skipping file (%s)",
+                source_file.relative_path, exc,
+            )
+        finally:
+            if progress_cb:
+                progress_cb(source_file.relative_path)
     
     # Phase 2: Build module-level nodes (L1)
     nodes: list[ArchNode] = []
