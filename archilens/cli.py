@@ -70,14 +70,18 @@ def analyze(
     _setup_logging(verbose)
     
     from archilens.engine import analyze_repository, generate_diagrams
-    from archilens.config import load_config
-    
+    from archilens.config import load_config, ConfigError
+
     repo_path = Path(repo).resolve()
     if not repo_path.exists():
         console.print(f"[red]Repository path does not exist:[/] {repo_path}")
         sys.exit(1)
-    
-    config = load_config(repo_path)
+
+    try:
+        config = load_config(repo_path)
+    except ConfigError as exc:
+        console.print(f"[red]Config error:[/] {exc}")
+        sys.exit(1)
     
     # Override config with CLI options
     if fmt != "mermaid":
@@ -124,7 +128,7 @@ def diff(repo: str, base: str, head: str, output: str | None, verbose: bool) -> 
 
     from archilens.analyzers.diff import compute_diff, check_rules, format_diff_as_markdown
     from archilens.analyzers.git_utils import checkout_ref, resolve_ref
-    from archilens.config import load_config
+    from archilens.config import load_config, ConfigError
     from archilens.engine import analyze_repository
 
     repo_path = Path(repo).resolve()
@@ -132,7 +136,11 @@ def diff(repo: str, base: str, head: str, output: str | None, verbose: bool) -> 
         console.print(f"[red]Repository path does not exist:[/] {repo_path}")
         sys.exit(1)
 
-    config = load_config(repo_path)
+    try:
+        config = load_config(repo_path)
+    except ConfigError as exc:
+        console.print(f"[red]Config error:[/] {exc}")
+        sys.exit(1)
 
     # Resolve SHAs so the user sees exactly what is being compared
     base_sha = resolve_ref(repo_path, base) or base
@@ -230,14 +238,18 @@ def history(repo: str, refs: str | None, use_tags: bool, max_refs: int, output: 
     _setup_logging(verbose)
 
     from archilens.analyzers.evolution import analyze_evolution, generate_timeline_diagram, generate_evolution_report
-    from archilens.config import load_config
+    from archilens.config import load_config, ConfigError
 
     repo_path = Path(repo).resolve()
     if not repo_path.exists():
         console.print(f"[red]Repository path does not exist:[/] {repo_path}")
         sys.exit(1)
 
-    config = load_config(repo_path)
+    try:
+        config = load_config(repo_path)
+    except ConfigError as exc:
+        console.print(f"[red]Config error:[/] {exc}")
+        sys.exit(1)
     ref_list = [r.strip() for r in refs.split(",")] if refs else None
 
     with console.status("[bold blue]Analysing git history..."):
@@ -330,7 +342,13 @@ def serve(repo: str, port: int, use_ai: bool, debug: bool) -> None:
     console.print(f"  Repository : [cyan]{repo_path}[/]")
     console.print(f"  AI features: {'[green]enabled[/]' if use_ai else '[dim]disabled (use --ai to enable)[/]'}")
     console.print(f"  URL        : [bold]http://localhost:{port}[/]")
-    console.print("[dim]Press Ctrl+C to stop[/]\n")
+    console.print("[dim]Press Ctrl+C to stop[/]")
+    console.print()
+    console.print(
+        "[yellow]NOTE:[/] This uses Flask's built-in dev server — "
+        "intended for local use only. Do not expose to the public internet."
+    )
+    console.print()
 
     app = create_app(repo_path, use_ai=use_ai)
     app.run(host="0.0.0.0", port=port, debug=debug)

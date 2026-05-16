@@ -7,10 +7,10 @@ name = "archilens"
 version = "0.1.0"
 description = "AI-powered layered architecture & process flow visualization for Git repositories"
 readme = "README.md"
-license = { text = "Apache-2.0" }
+license = { text = "MIT" }
 requires-python = ">=3.10"
 authors = [
-    { name = "ArchiLens Contributors" }
+    { name = "Saurabh", email = "fosslectures@gmail.com" }
 ]
 keywords = [
     "architecture", "diagrams", "github", "visualization",
@@ -19,7 +19,7 @@ keywords = [
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
+    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -63,9 +63,10 @@ viewer = [
 archilens = "archilens.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/your-org/archilens"
-Repository = "https://github.com/your-org/archilens"
-Issues = "https://github.com/your-org/archilens/issues"
+Homepage = "https://saurabh-oss.github.io/archilens/"
+Repository = "https://github.com/saurabh-oss/archilens"
+Issues = "https://github.com/saurabh-oss/archilens/issues"
+Changelog = "https://github.com/saurabh-oss/archilens/releases"
 
 [tool.ruff]
 target-version = "py310"

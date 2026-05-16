@@ -102,22 +102,48 @@ class ArchiLensConfig:
     baseline_refs: list[str] = field(default_factory=lambda: ["main"])
 
 
+class ConfigError(Exception):
+    """Raised when .archilens.yml is malformed or contains invalid values."""
+
+
 def load_config(repo_path: str | Path) -> ArchiLensConfig:
     """
     Load ArchiLens configuration from a repository.
-    
+
     Looks for .archilens.yml or .archilens.yaml in the repo root.
     Returns default config if no file is found.
+
+    Raises:
+        ConfigError: If the config file exists but cannot be parsed.
     """
     repo_path = Path(repo_path)
-    
+
     for filename in [".archilens.yml", ".archilens.yaml"]:
         config_path = repo_path / filename
         if config_path.exists():
-            with open(config_path) as f:
-                raw = yaml.safe_load(f) or {}
-            return _parse_config(raw)
-    
+            try:
+                with open(config_path, encoding="utf-8") as f:
+                    raw = yaml.safe_load(f) or {}
+            except yaml.YAMLError as exc:
+                raise ConfigError(
+                    f"Could not parse {config_path.name}: {exc}\n"
+                    "Check for tabs instead of spaces, or missing colons."
+                ) from exc
+
+            if not isinstance(raw, dict):
+                raise ConfigError(
+                    f"{config_path.name} must be a YAML mapping (key: value pairs), "
+                    f"got {type(raw).__name__}."
+                )
+
+            try:
+                return _parse_config(raw)
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ConfigError(
+                    f"Invalid value in {config_path.name}: {exc}\n"
+                    "Run 'python -m archilens init' to see the expected structure."
+                ) from exc
+
     # No config file found — use defaults with auto-detection
     return ArchiLensConfig()
 
