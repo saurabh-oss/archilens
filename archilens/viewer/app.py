@@ -625,14 +625,15 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
     const vp  = document.getElementById('diagram-viewport');
     const svg = vp.querySelector('svg');
     if (!svg) return;
-    const vb = svg.viewBox && svg.viewBox.baseVal;
-    if (!vb || !vb.width || !vb.height) return;
+    // Use the pixel dimensions we set from viewBox; fall back to getBoundingClientRect
+    const naturalW = parseFloat(svg.style.width)  || svg.getBoundingClientRect().width  / _zoom;
+    const naturalH = parseFloat(svg.style.height) || svg.getBoundingClientRect().height / _zoom;
+    if (!naturalW || !naturalH) return;
     const pad = 48;
-    const scaleX = (vp.clientWidth  - pad) / vb.width;
-    const scaleY = (vp.clientHeight - pad) / vb.height;
+    const scaleX = (vp.clientWidth  - pad) / naturalW;
+    const scaleY = (vp.clientHeight - pad) / naturalH;
     _applyZoom(Math.min(scaleX, scaleY));
-    // Scroll to top-left after fitting
-    vp.scrollTop = 0;
+    vp.scrollTop  = 0;
     vp.scrollLeft = 0;
   }
 
@@ -691,19 +692,25 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
     try {
       await mermaid.run({ nodes: [el] });
 
-      // Strip Mermaid's fixed height/width attributes so the SVG
-      // scales purely from its viewBox when we apply CSS transforms.
+      // Give the SVG explicit pixel dimensions derived from its viewBox
+      // so it renders at natural size. CSS transform then handles zoom.
       const svg = el.querySelector('svg');
       if (svg) {
-        svg.removeAttribute('height');
+        const vb = svg.viewBox && svg.viewBox.baseVal;
+        if (vb && vb.width) {
+          svg.style.width  = vb.width  + 'px';
+          svg.style.height = vb.height + 'px';
+        }
         svg.removeAttribute('width');
-        svg.style.display = 'block';
+        svg.removeAttribute('height');
+        svg.style.maxWidth = 'none';
+        svg.style.display  = 'block';
       }
 
       // Show zoom controls and auto-fit the diagram
       document.getElementById('zoom-controls').style.display = 'flex';
       _zoom = 1.0;
-      setTimeout(fitDiagram, 30);
+      setTimeout(fitDiagram, 50);
 
       // Wire click-to-drill-down for L1 module nodes
       if (data.level === 1) {
