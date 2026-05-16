@@ -672,15 +672,14 @@
           <button class="demo-tab" onclick="showDiagram('l3',this)">L3 Flow</button>
         </div>
         <div class="mermaid-wrap" id="diagramWrap">
-          <div class="mermaid" id="diagramEl">%%{init:{"theme":"dark"}}%%
-flowchart LR
+          <div class="mermaid" id="diagramEl">flowchart LR
   subgraph API["API Layer"]
-    gateway["API Gateway\n/api-gateway"]
+    gateway["API Gateway"]
   end
   subgraph BIZ["Business Layer"]
-    orders["Orders\n📦 Order management"]
-    payments["Payments\n💳 Billing & invoicing"]
-    inventory["Inventory\n🏭 Stock tracking"]
+    orders["Orders - Order management"]
+    payments["Payments - Billing"]
+    inventory["Inventory - Stock tracking"]
   end
   subgraph DATA["Data Layer"]
     db[("PostgreSQL")]
@@ -853,15 +852,14 @@ flowchart LR
 
   // Diagram tabs
   const diagrams = {
-    l1: `%%{init:{"theme":"dark"}}%%
-flowchart LR
+    l1: `flowchart LR
   subgraph API["API Layer"]
     gateway["API Gateway"]
   end
   subgraph BIZ["Business Layer"]
-    orders["Orders\\n📦 Order management"]
-    payments["Payments\\n💳 Billing"]
-    inventory["Inventory\\n🏭 Stock"]
+    orders["Orders - Order management"]
+    payments["Payments - Billing"]
+    inventory["Inventory - Stock"]
   end
   subgraph DATA["Data Layer"]
     db[("PostgreSQL")]
@@ -875,34 +873,32 @@ flowchart LR
   payments --> db
   inventory --> cache`,
 
-    l2: `%%{init:{"theme":"dark"}}%%
-classDiagram
+    l2: `classDiagram
   class OrderService {
-    +create_order(cart) Order
-    +cancel_order(id) void
-    +get_order(id) Order
-    -_validate(cart) bool
+    +createOrder(cart) Order
+    +cancelOrder(id) void
+    +getOrder(id) Order
+    -validate(cart) bool
   }
   class PaymentGateway {
-    <<interface>>
-    +charge(amount, token) Receipt
-    +refund(receipt_id) void
+    <<Interface>>
+    +charge(amount) Receipt
+    +refund(id) void
   }
   class StripeGateway {
-    +charge(amount, token) Receipt
-    +refund(receipt_id) void
+    +charge(amount) Receipt
+    +refund(id) void
   }
   class Order {
-    +id: UUID
-    +status: OrderStatus
-    +total: Decimal
+    +String id
+    +String status
+    +float total
   }
   OrderService --> PaymentGateway
   StripeGateway ..|> PaymentGateway
   OrderService --> Order`,
 
-    l3: `%%{init:{"theme":"dark"}}%%
-sequenceDiagram
+    l3: `sequenceDiagram
   autonumber
   actor User
   participant GW as API Gateway
