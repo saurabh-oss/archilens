@@ -1,0 +1,102 @@
+# .github/workflows/archilens.yml
+# 
+# ArchiLens CI/CD Integration
+# Generates architecture diagrams on push and detects drift on PRs.
+
+name: Architecture Analysis
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  architecture:
+    name: ArchiLens Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for diff analysis
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ArchiLens
+        run: pip install archilens
+
+      # ── Generate diagrams on push to main ──
+      - name: Generate Architecture Diagrams
+        if: github.event_name == 'push'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          archilens analyze --repo . --output .archilens/diagrams --verbose
+
+      - name: Commit Updated Diagrams
+        if: github.event_name == 'push'
+        run: |
+          git config user.name "ArchiLens Bot"
+          git config user.email "archilens[bot]@users.noreply.github.com"
+          git add .archilens/diagrams/
+          git diff --cached --quiet || git commit -m "docs: update architecture diagrams [skip ci]"
+          git push
+
+      # ── Drift detection on PRs ──
+      - name: Architecture Drift Detection
+        if: github.event_name == 'pull_request'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          archilens diff \
+            --repo . \
+            --base origin/${{ github.base_ref }} \
+            --head HEAD \
+            > /tmp/arch-diff.md
+
+      - name: Comment PR with Architecture Changes
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let body;
+            try {
+              body = fs.readFileSync('/tmp/arch-diff.md', 'utf8');
+            } catch {
+              body = '## 🏗️ ArchiLens\n\nNo architecture changes detected.';
+            }
+            
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const existing = comments.find(c => 
+              c.body.includes('ArchiLens')
+            );
+            
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }

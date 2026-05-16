@@ -1,0 +1,173 @@
+# =============================================================================
+# ArchiLens Configuration
+# =============================================================================
+# This file defines how ArchiLens analyzes your repository and maps code
+# to business capabilities. Place at the root of your repository.
+
+# Project metadata
+project:
+  name: "My Application"
+  description: "Order management platform"
+  type: "microservices"  # monolith | microservices | modular-monolith | library
+
+# Analysis settings
+analysis:
+  # Languages to analyze (auto-detected if omitted)
+  languages: ["python", "typescript", "java"]
+  
+  # Entry points for process flow tracing
+  entry_points:
+    - pattern: "**/*controller*.py"
+      type: "http_handler"
+    - pattern: "**/*handler*.py"
+      type: "event_handler"
+    - pattern: "**/main.py"
+      type: "application_entry"
+    - pattern: "**/routes/**/*.ts"
+      type: "http_handler"
+
+  # Directories/patterns to exclude from analysis
+  exclude:
+    - "**/node_modules/**"
+    - "**/__pycache__/**"
+    - "**/venv/**"
+    - "**/.git/**"
+    - "**/dist/**"
+    - "**/build/**"
+    - "**/*.test.*"
+    - "**/*.spec.*"
+
+  # Max depth for dependency resolution
+  max_depth: 5
+
+# Diagram generation settings
+diagrams:
+  # Output directory for generated diagrams
+  output_dir: ".archilens/diagrams"
+  
+  # Output format: mermaid | d2 | plantuml
+  format: "mermaid"
+  
+  # Diagram levels to generate
+  levels:
+    # L0: System Context - your system as a black box with external actors
+    - level: 0
+      name: "System Context"
+      enabled: true
+    
+    # L1: Module/Service Overview - major components and their relationships
+    - level: 1
+      name: "Module Architecture"
+      enabled: true
+    
+    # L2: Component Detail - internals of each module
+    - level: 2
+      name: "Component Detail"
+      enabled: true
+      # Which modules to drill into (all if omitted)
+      modules: []
+    
+    # L3: Process Flows - runtime behavior, request lifecycles
+    - level: 3
+      name: "Process Flows"
+      enabled: true
+      # Max number of flows to generate
+      max_flows: 10
+
+  # Theme for Mermaid diagrams
+  theme: "default"  # default | dark | forest | neutral
+
+# Business capability mapping
+# Maps code modules to business domains (DDD bounded contexts)
+capabilities:
+  - name: "Order Management"
+    description: "Handles order lifecycle from creation to fulfillment"
+    modules:
+      - "src/orders/**"
+      - "services/order-service/**"
+    
+  - name: "Payment Processing"
+    description: "Payment gateway integration and transaction management"
+    modules:
+      - "src/payments/**"
+      - "services/payment-service/**"
+    
+  - name: "User Management"
+    description: "Authentication, authorization, and user profiles"
+    modules:
+      - "src/auth/**"
+      - "src/users/**"
+    
+  - name: "Inventory"
+    description: "Stock tracking and warehouse management"
+    modules:
+      - "src/inventory/**"
+
+# External systems your application interacts with
+external_systems:
+  - name: "PostgreSQL"
+    type: "database"
+    description: "Primary data store"
+    
+  - name: "Redis"
+    type: "cache"
+    description: "Session and query cache"
+    
+  - name: "Stripe API"
+    type: "external_api"
+    description: "Payment processing"
+    
+  - name: "SendGrid"
+    type: "external_api"
+    description: "Email notifications"
+
+# AI configuration
+ai:
+  # Provider: anthropic | openai | ollama | litellm
+  provider: "anthropic"
+  
+  # Model to use for analysis
+  model: "claude-sonnet-4-20250514"
+  
+  # What AI should help with
+  features:
+    # Infer process flows from code that static analysis can't capture
+    process_flow_inference: true
+    # Generate natural-language annotations for diagram nodes
+    node_annotations: true
+    # Suggest business capability mappings
+    capability_suggestions: true
+    # Detect architectural patterns (MVC, hexagonal, event-driven, etc.)
+    pattern_detection: true
+    # Summarize module responsibilities
+    module_summaries: true
+
+# CI/CD integration
+ci:
+  # Run on pull requests to detect architecture drift
+  drift_detection: true
+  
+  # Comment on PRs with architecture diff
+  pr_comments: true
+  
+  # Fail the build if certain rules are violated
+  rules:
+    # Disallow direct dependencies from presentation to infrastructure
+    - name: "no-layer-skip"
+      from: "src/presentation/**"
+      to: "src/infrastructure/**"
+      action: "warn"  # warn | fail
+    
+    # Max allowed module fan-out (number of dependencies)
+    - name: "max-fan-out"
+      threshold: 10
+      action: "warn"
+
+# Evolution tracking
+evolution:
+  # Track architecture changes across Git tags/releases
+  enabled: true
+  # Compare against these refs
+  baseline_refs:
+    - "main"
+    - "tags/v*"

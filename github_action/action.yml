@@ -1,0 +1,115 @@
+name: "ArchiLens - Architecture Analysis"
+description: "AI-powered architecture visualization and drift detection"
+
+inputs:
+  repo-path:
+    description: "Path to the repository to analyze"
+    required: false
+    default: "."
+  enable-ai:
+    description: "Enable AI-powered analysis features"
+    required: false
+    default: "true"
+  anthropic-api-key:
+    description: "Anthropic API key for AI features"
+    required: false
+  comment-on-pr:
+    description: "Post architecture diff as PR comment"
+    required: false
+    default: "true"
+  fail-on-violations:
+    description: "Fail the workflow if architecture rules are violated"
+    required: false
+    default: "false"
+  diagrams-output:
+    description: "Output directory for generated diagrams"
+    required: false
+    default: ".archilens/diagrams"
+
+outputs:
+  diagrams-path:
+    description: "Path to generated diagrams"
+  has-changes:
+    description: "Whether architecture changed from base"
+  violations-count:
+    description: "Number of architecture rule violations"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install ArchiLens
+      shell: bash
+      run: |
+        pip install archilens
+
+    - name: Run Architecture Analysis
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+      run: |
+        archilens analyze \
+          --repo "${{ inputs.repo-path }}" \
+          --output "${{ inputs.diagrams-output }}" \
+          ${{ inputs.enable-ai == 'false' && '--no-ai' || '' }} \
+          --verbose
+
+    - name: Architecture Drift Detection (PR)
+      if: github.event_name == 'pull_request' && inputs.comment-on-pr == 'true'
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+      run: |
+        archilens diff \
+          --repo "${{ inputs.repo-path }}" \
+          --base "${{ github.event.pull_request.base.sha }}" \
+          --head "${{ github.event.pull_request.head.sha }}" \
+          > /tmp/arch-diff.md 2>&1 || true
+
+    - name: Comment on PR
+      if: github.event_name == 'pull_request' && inputs.comment-on-pr == 'true'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const diffContent = fs.readFileSync('/tmp/arch-diff.md', 'utf8');
+          
+          // Find existing ArchiLens comment
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+          
+          const existingComment = comments.find(c => 
+            c.body.includes('ArchiLens — Architecture Diff')
+          );
+          
+          const body = diffContent || 'No architecture changes detected.';
+          
+          if (existingComment) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existingComment.id,
+              body: body,
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body,
+            });
+          }
+
+    - name: Upload Diagrams as Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: archilens-diagrams
+        path: ${{ inputs.diagrams-output }}
+        retention-days: 30
