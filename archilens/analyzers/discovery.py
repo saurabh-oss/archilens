@@ -57,10 +57,11 @@ MODULE_MARKERS = {
 @dataclass
 class SourceFile:
     """A discovered source file."""
+
     path: Path
     relative_path: str
     language: str
-    module: str           # Logical module this file belongs to
+    module: str  # Logical module this file belongs to
     lines: int = 0
     is_entry_point: bool = False
     is_test: bool = False
@@ -69,6 +70,7 @@ class SourceFile:
 @dataclass
 class Module:
     """A logical module (directory-based grouping)."""
+
     name: str
     path: str
     files: list[SourceFile] = field(default_factory=list)
@@ -83,51 +85,51 @@ def discover_files(
 ) -> tuple[list[SourceFile], dict[str, Module]]:
     """
     Discover all source files in the repository and organize them into modules.
-    
+
     Returns:
         Tuple of (list of all source files, dict of module name -> Module)
     """
     repo_path = Path(repo_path).resolve()
     exclude_patterns = config.analysis.exclude
     allowed_languages = set(config.analysis.languages) if config.analysis.languages else None
-    
+
     files: list[SourceFile] = []
     modules: dict[str, Module] = {}
-    
+
     for file_path in repo_path.rglob("*"):
         if not file_path.is_file():
             continue
-        
+
         relative = str(file_path.relative_to(repo_path))
-        
+
         # Apply exclusion filters
         if _is_excluded(relative, exclude_patterns):
             continue
-        
+
         # Detect language from extension
         language = EXTENSION_MAP.get(file_path.suffix.lower())
         if language is None:
             continue
-        
+
         # Filter by configured languages
         if allowed_languages and language not in allowed_languages:
             continue
-        
+
         # Count lines
         try:
             line_count = sum(1 for _ in file_path.open(encoding="utf-8", errors="ignore"))
         except OSError:
             line_count = 0
-        
+
         # Determine module from directory structure
         module_name = _determine_module(relative, repo_path)
-        
+
         # Check if test file
         is_test = _is_test_file(relative)
-        
+
         # Check if entry point
         is_entry = _is_entry_point(relative, config.analysis.entry_points)
-        
+
         source_file = SourceFile(
             path=file_path,
             relative_path=relative,
@@ -182,15 +184,15 @@ def _is_excluded(relative_path: str, patterns: list[str]) -> bool:
 def _determine_module(relative_path: str, repo_root: Path) -> str:
     """
     Determine the logical module a file belongs to.
-    
+
     Uses the first two directory levels as the module identifier.
     For flat structures, uses the first directory level.
     """
     parts = Path(relative_path).parts
-    
+
     if len(parts) <= 1:
         return "<root>"
-    
+
     # Use up to 2 directory levels for module grouping
     # e.g., "src/orders/service.py" -> "src/orders"
     # e.g., "lib/utils.py" -> "lib"

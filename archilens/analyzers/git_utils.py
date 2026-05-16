@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import logging
 import tempfile
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Generator, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -39,21 +39,18 @@ def checkout_ref(
     """
     try:
         import git  # type: ignore[import]
-    except ImportError:
-        raise RuntimeError(
-            "gitpython is required for multi-ref diff. "
-            "Install with: pip install gitpython"
-        )
+    except ImportError as exc:
+        raise RuntimeError("gitpython is required for multi-ref diff. Install with: pip install gitpython") from exc
 
     try:
         repo = git.Repo(repo_path, search_parent_directories=True)
-    except git.InvalidGitRepositoryError:
-        raise RuntimeError(f"{repo_path} is not a Git repository.")
+    except git.InvalidGitRepositoryError as exc:
+        raise RuntimeError(f"{repo_path} is not a Git repository.") from exc
 
     try:
         commit = repo.commit(ref)
-    except git.BadName:
-        raise RuntimeError(f"Cannot resolve git ref: {ref!r}")
+    except git.BadName as exc:
+        raise RuntimeError(f"Cannot resolve git ref: {ref!r}") from exc
 
     with tempfile.TemporaryDirectory(prefix=f"archilens_{_safe_ref(ref)}_") as tmpdir:
         tmp_path = Path(tmpdir)
@@ -62,10 +59,11 @@ def checkout_ref(
         yield tmp_path
 
 
-def resolve_ref(repo_path: Path, ref: str) -> Optional[str]:
+def resolve_ref(repo_path: Path, ref: str) -> str | None:
     """Return the full commit SHA for *ref*, or None if it cannot be resolved."""
     try:
         import git  # type: ignore[import]
+
         repo = git.Repo(repo_path, search_parent_directories=True)
         return repo.commit(ref).hexsha
     except Exception:
@@ -76,6 +74,7 @@ def get_tags(repo_path: Path) -> list[str]:
     """Return all tag names sorted oldest-to-newest by commit date."""
     try:
         import git  # type: ignore[import]
+
         repo = git.Repo(repo_path, search_parent_directories=True)
         tags = sorted(
             repo.tags,
@@ -89,6 +88,7 @@ def get_tags(repo_path: Path) -> list[str]:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _extract_tree(tree, dest: Path) -> None:
     """Recursively write all blobs in *tree* under *dest*."""

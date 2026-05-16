@@ -12,9 +12,6 @@ GitLab:          natively rendered in .puml files
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Optional
-
 from archilens.generators.base import DiagramGenerator
 from archilens.models import (
     ArchSnapshot,
@@ -64,23 +61,23 @@ class PlantUMLGenerator(DiagramGenerator):
                 lines.append(f'rectangle "{ext.name}" as {ext_id} #999999')
             desc = ext.description
             if desc:
-                lines.append(f'note right of {ext_id}: {desc}')
+                lines.append(f"note right of {ext_id}: {desc}")
             lines.append(f"{sys_id} --> {ext_id}")
             lines.append("")
 
-        has_http = any(
-            f.trigger.startswith(("GET", "POST", "PUT", "DELETE", "PATCH"))
-            for f in snapshot.flows
-        )
+        has_http = any(f.trigger.startswith(("GET", "POST", "PUT", "DELETE", "PATCH")) for f in snapshot.flows)
         if has_http:
             lines.append('actor "User / Client" as user')
             lines.append(f"user --> {sys_id}")
             lines.append("")
 
         if snapshot.detected_patterns:
-            lines.append("note top of " + sys_id + " : Patterns:\\n" + "\\n".join(
-                p.value.replace("_", " ").title() for p in snapshot.detected_patterns
-            ))
+            lines.append(
+                "note top of "
+                + sys_id
+                + " : Patterns:\\n"
+                + "\\n".join(p.value.replace("_", " ").title() for p in snapshot.detected_patterns)
+            )
             lines.append("")
 
         lines.append("@enduml")
@@ -128,7 +125,7 @@ class PlantUMLGenerator(DiagramGenerator):
                     label = node.name
                     if node.lines_of_code:
                         label += f"\\n{node.lines_of_code:,} LOC"
-                    lines.append(f'  component [{label}] as {nid}')
+                    lines.append(f"  component [{label}] as {nid}")
                     grouped.add(mod_id)
             lines.append("}")
             lines.append("")
@@ -140,7 +137,7 @@ class PlantUMLGenerator(DiagramGenerator):
                 label = node.name
                 if node.lines_of_code:
                     label += f"\\n{node.lines_of_code:,} LOC"
-                lines.append(f'component [{label}] as {nid}')
+                lines.append(f"component [{label}] as {nid}")
 
         lines.append("")
 
@@ -173,7 +170,7 @@ class PlantUMLGenerator(DiagramGenerator):
     # L2: Component Detail
     # -------------------------------------------------------------------
 
-    def component_detail(self, snapshot: ArchSnapshot, module_id: str) -> Optional[str]:
+    def component_detail(self, snapshot: ArchSnapshot, module_id: str) -> str | None:
         children = snapshot.get_children(module_id)
         if not children:
             return None
@@ -200,7 +197,7 @@ class PlantUMLGenerator(DiagramGenerator):
             else:
                 lines.append(f'class "{child.name}" as {cid}')
                 if child.file_path:
-                    lines.append(f'note bottom of {cid}: {child.file_path}')
+                    lines.append(f"note bottom of {cid}: {child.file_path}")
 
         lines.append("")
 
@@ -279,6 +276,7 @@ class PlantUMLGenerator(DiagramGenerator):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _safe_id(raw: str) -> str:
     """Convert arbitrary string to a PlantUML-safe identifier."""

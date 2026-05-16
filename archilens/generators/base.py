@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Optional
 
 from archilens.config import ArchiLensConfig
 from archilens.models import ArchSnapshot, ProcessFlow
@@ -59,10 +58,9 @@ class DiagramGenerator(ABC):
                 modules = level_cfg.get("modules", [])
                 module_nodes = snapshot.get_module_nodes()
                 targets = (
-                    [n for n in module_nodes if any(
-                        n.file_path and n.file_path.startswith(m) for m in modules
-                    )]
-                    if modules else module_nodes
+                    [n for n in module_nodes if any(n.file_path and n.file_path.startswith(m) for m in modules)]
+                    if modules
+                    else module_nodes
                 )
                 for mod_node in targets:
                     safe_name = mod_node.name.replace(" ", "_").replace("/", "_").lower()
@@ -80,7 +78,7 @@ class DiagramGenerator(ABC):
                     path.write_text(self.process_flow(flow), encoding="utf-8")
                     generated.append(path)
 
-        index_path = output_dir / f"INDEX.md"
+        index_path = output_dir / "INDEX.md"
         index_path.write_text(self.index(snapshot, generated), encoding="utf-8")
         generated.append(index_path)
 
@@ -95,7 +93,7 @@ class DiagramGenerator(ABC):
         """Generate L1 module architecture diagram."""
 
     @abstractmethod
-    def component_detail(self, snapshot: ArchSnapshot, module_id: str) -> Optional[str]:
+    def component_detail(self, snapshot: ArchSnapshot, module_id: str) -> str | None:
         """Generate L2 component detail diagram for a module."""
 
     @abstractmethod
@@ -143,10 +141,13 @@ def get_generator(config: ArchiLensConfig) -> DiagramGenerator:
 
     if fmt == "d2":
         from archilens.generators.d2 import D2Generator
+
         return D2Generator(config)
     elif fmt in ("plantuml", "puml"):
         from archilens.generators.plantuml import PlantUMLGenerator
+
         return PlantUMLGenerator(config)
     else:
         from archilens.generators.mermaid import MermaidGenerator
+
         return MermaidGenerator(config)

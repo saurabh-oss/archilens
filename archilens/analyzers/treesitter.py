@@ -15,7 +15,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -23,12 +23,12 @@ logger = logging.getLogger(__name__)
 # Grammar registry — lazy-loaded per language
 # ---------------------------------------------------------------------------
 
-_LANGUAGES: dict[str, Any] = {}   # language_name -> Language object
-_PARSERS: dict[str, Any] = {}     # language_name -> Parser object
+_LANGUAGES: dict[str, Any] = {}  # language_name -> Language object
+_PARSERS: dict[str, Any] = {}  # language_name -> Parser object
 _FALLBACK_WARNED: set[str] = set()  # languages already warned about
 
 
-def _get_lang_parser(language: str) -> Optional[tuple[Any, Any]]:
+def _get_lang_parser(language: str) -> tuple[Any, Any] | None:
     """Return (Language, Parser) for *language*, or None if unavailable."""
     if language in _PARSERS:
         return _LANGUAGES[language], _PARSERS[language]
@@ -40,14 +40,17 @@ def _get_lang_parser(language: str) -> Optional[tuple[Any, Any]]:
 
         if language == "python":
             import tree_sitter_python as _m  # type: ignore[import]
+
             lang_obj = Language(_m.language())
 
         elif language == "javascript":
             import tree_sitter_javascript as _m  # type: ignore[import]
+
             lang_obj = Language(_m.language())
 
         elif language == "typescript":
             import tree_sitter_typescript as _m  # type: ignore[import]
+
             fn = getattr(_m, "language_typescript", None) or getattr(_m, "language", None)
             if fn is None:
                 return None
@@ -55,10 +58,12 @@ def _get_lang_parser(language: str) -> Optional[tuple[Any, Any]]:
 
         elif language == "java":
             import tree_sitter_java as _m  # type: ignore[import]
+
             lang_obj = Language(_m.language())
 
         elif language == "go":
             import tree_sitter_go as _m  # type: ignore[import]
+
             lang_obj = Language(_m.language())
 
         else:
@@ -75,7 +80,9 @@ def _get_lang_parser(language: str) -> Optional[tuple[Any, Any]]:
             logger.warning(
                 "tree-sitter grammar for '%s' unavailable (%s) — falling back to regex. "
                 "For better accuracy install: pip install tree-sitter-%s",
-                language, exc, language,
+                language,
+                exc,
+                language,
             )
         return None
 
@@ -167,6 +174,7 @@ _PYTHON_BASES_QUERY = """
 # Result types
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class TSImport:
     path: str
@@ -197,6 +205,7 @@ class TSExtractionResult:
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
+
 
 def extract_from_file(
     file_path: Path,
@@ -231,9 +240,7 @@ def extract_from_file(
         try:
             captures = _query_captures(lang_obj, import_query_str, tree.root_node)
             for node in captures.get("stmt", []):
-                text = source_bytes[node.start_byte:node.end_byte].decode(
-                    "utf-8", errors="replace"
-                )
+                text = source_bytes[node.start_byte : node.end_byte].decode("utf-8", errors="replace")
                 result.imports.extend(_parse_import_text(text, language))
         except Exception as exc:
             logger.debug("Import query failed for %s (%s): %s", file_path, language, exc)
@@ -297,6 +304,7 @@ def extract_from_file(
 # Query execution helpers — tree-sitter >= 0.24 (QueryCursor API)
 # ---------------------------------------------------------------------------
 
+
 def _query_captures(lang_obj: Any, query_str: str, node: Any) -> dict[str, list[Any]]:
     """
     Execute a query and return captures as ``dict[capture_name, list[Node]]``.
@@ -306,6 +314,7 @@ def _query_captures(lang_obj: Any, query_str: str, node: Any) -> dict[str, list[
     """
     try:
         from tree_sitter import Query, QueryCursor  # type: ignore[import]
+
         q = Query(lang_obj, query_str)
         cursor = QueryCursor(q)
         result = cursor.captures(node)
@@ -343,6 +352,7 @@ def _query_matches(
     """
     try:
         from tree_sitter import Query, QueryCursor  # type: ignore[import]
+
         q = Query(lang_obj, query_str)
         cursor = QueryCursor(q)
         raw = cursor.matches(node)
@@ -351,10 +361,7 @@ def _query_matches(
             if isinstance(item, tuple) and len(item) == 2:
                 idx, caps = item
                 if isinstance(caps, dict):
-                    normalised = {
-                        k: (v if isinstance(v, list) else [v])
-                        for k, v in caps.items()
-                    }
+                    normalised = {k: (v if isinstance(v, list) else [v]) for k, v in caps.items()}
                     out.append((idx, normalised))
         return out
     except Exception:
@@ -365,10 +372,11 @@ def _query_matches(
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _node_text(node: Any, source_bytes: bytes) -> str:
     """Decode the source span covered by *node*."""
     try:
-        return source_bytes[node.start_byte:node.end_byte].decode("utf-8", errors="replace").strip()
+        return source_bytes[node.start_byte : node.end_byte].decode("utf-8", errors="replace").strip()
     except Exception:
         return ""
 

@@ -21,9 +21,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
-from io import StringIO
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -32,9 +30,11 @@ logger = logging.getLogger(__name__)
 # Data models
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class RefSnapshot:
     """Architecture metrics captured at a single git ref."""
+
     ref: str
     timestamp: str
     module_count: int
@@ -50,22 +50,24 @@ class RefSnapshot:
 @dataclass
 class EvolutionTimeline:
     """Collection of architecture snapshots across git history."""
+
     project_name: str
     refs: list[RefSnapshot] = field(default_factory=list)
 
     # Modules that were added / removed between consecutive refs
-    additions: list[tuple[str, str]] = field(default_factory=list)   # (module, ref)
-    removals: list[tuple[str, str]] = field(default_factory=list)    # (module, ref)
+    additions: list[tuple[str, str]] = field(default_factory=list)  # (module, ref)
+    removals: list[tuple[str, str]] = field(default_factory=list)  # (module, ref)
 
 
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 
+
 def analyze_evolution(
     repo_path: Path,
     config,  # ArchiLensConfig
-    refs: Optional[list[str]] = None,
+    refs: list[str] | None = None,
     use_tags: bool = False,
     max_refs: int = 10,
 ) -> EvolutionTimeline:
@@ -86,16 +88,13 @@ def analyze_evolution(
     """
     try:
         import git  # type: ignore[import]
-    except ImportError:
-        raise RuntimeError(
-            "gitpython is required for evolution analysis. "
-            "Install with: pip install gitpython"
-        )
+    except ImportError as exc:
+        raise RuntimeError("gitpython is required for evolution analysis. Install with: pip install gitpython") from exc
 
     try:
         repo = git.Repo(repo_path, search_parent_directories=True)
-    except git.InvalidGitRepositoryError:
-        raise RuntimeError(f"{repo_path} is not a Git repository.")
+    except git.InvalidGitRepositoryError as exc:
+        raise RuntimeError(f"{repo_path} is not a Git repository.") from exc
 
     # Resolve which refs to analyse
     if refs is None:
@@ -138,6 +137,7 @@ def analyze_evolution(
 # ---------------------------------------------------------------------------
 # Diagram generators
 # ---------------------------------------------------------------------------
+
 
 def generate_timeline_diagram(timeline: EvolutionTimeline) -> str:
     """
@@ -254,7 +254,8 @@ def generate_evolution_report(timeline: EvolutionTimeline) -> str:
 # Private helpers
 # ---------------------------------------------------------------------------
 
-def _analyse_ref(repo, repo_path: Path, ref: str, config) -> Optional[RefSnapshot]:
+
+def _analyse_ref(repo, repo_path: Path, ref: str, config) -> RefSnapshot | None:
     """
     Analyse the architecture at *ref* by reading blobs from the git object db.
 
@@ -288,10 +289,7 @@ def _analyse_ref(repo, repo_path: Path, ref: str, config) -> Optional[RefSnapsho
 
             # Determine module (first 1-2 path components)
             parts = Path(path).parts
-            if len(parts) == 1:
-                module_name = "<root>"
-            else:
-                module_name = "/".join(parts[:min(2, len(parts) - 1)])
+            module_name = "<root>" if len(parts) == 1 else "/".join(parts[: min(2, len(parts) - 1)])
 
             # Count lines of code
             try:
@@ -301,7 +299,8 @@ def _analyse_ref(repo, repo_path: Path, ref: str, config) -> Optional[RefSnapsho
                 total_nodes += 1
                 # Rough edge estimate: count import lines
                 total_edges += sum(
-                    1 for line in content.splitlines()
+                    1
+                    for line in content.splitlines()
                     if line.strip().startswith(("import ", "from ", "require(", "use "))
                 )
             except Exception:
@@ -345,16 +344,15 @@ def _try_int(s: str) -> int:
 
 def _get_lang_extensions(config) -> set[str]:
     from archilens.analyzers.discovery import EXTENSION_MAP
+
     if config.analysis.languages:
-        return {
-            ext for ext, lang in EXTENSION_MAP.items()
-            if lang in config.analysis.languages
-        }
+        return {ext for ext, lang in EXTENSION_MAP.items() if lang in config.analysis.languages}
     return set(EXTENSION_MAP.keys())
 
 
 def _is_source_file(path: str, lang_exts: set[str], excludes: list[str]) -> bool:
     import fnmatch
+
     suffix = Path(path).suffix.lower()
     if suffix not in lang_exts:
         return False
@@ -386,6 +384,7 @@ def _detect_patterns_lightweight(module_names: set[str]) -> list[str]:
 # Diagram helpers
 # ---------------------------------------------------------------------------
 
+
 def _single_ref_note(timeline: EvolutionTimeline) -> str:
     if not timeline.refs:
         return f"# Evolution — {timeline.project_name}\n\n*No refs to compare.*\n"
@@ -409,7 +408,7 @@ def _loc_growth_chart(timeline: EvolutionTimeline) -> list[str]:
         "```mermaid",
         "xychart-beta",
         '    title "Total LOC per Release"',
-        '    x-axis [' + ", ".join(f'"{r.ref}"' for r in timeline.refs) + "]",
+        "    x-axis [" + ", ".join(f'"{r.ref}"' for r in timeline.refs) + "]",
         '    y-axis "LOC"',
         "    bar [" + ", ".join(str(r.total_loc) for r in timeline.refs) + "]",
         "```",

@@ -14,11 +14,10 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from archilens.config import AIConfig
 from archilens.models import (
-    ArchNode,
     ArchPattern,
     ArchSnapshot,
     FlowStep,
@@ -123,49 +122,46 @@ Return ONLY a JSON object:
 # AI Client abstraction
 # ---------------------------------------------------------------------------
 
+
 class AIClient:
     """
     Abstraction over LLM providers.
-    
+
     Supports Anthropic (Claude), OpenAI, Ollama, and any
     OpenAI-compatible endpoint via LiteLLM.
     """
-    
+
     def __init__(self, config: AIConfig):
         self.config = config
         self._client: Any = None
-    
+
     def _get_client(self) -> Any:
         """Lazy-initialize the LLM client."""
         if self._client is not None:
             return self._client
-        
+
         if self.config.provider == "anthropic":
             try:
                 import anthropic
+
                 self._client = anthropic.Anthropic()
                 return self._client
-            except ImportError:
-                raise RuntimeError(
-                    "anthropic package not installed. "
-                    "Run: pip install anthropic"
-                )
+            except ImportError as exc:
+                raise RuntimeError("anthropic package not installed. Run: pip install anthropic") from exc
         else:
             # Use LiteLLM for all other providers
             try:
                 import litellm
+
                 self._client = litellm
                 return self._client
-            except ImportError:
-                raise RuntimeError(
-                    "litellm package not installed. "
-                    "Run: pip install litellm"
-                )
-    
+            except ImportError as exc:
+                raise RuntimeError("litellm package not installed. Run: pip install litellm") from exc
+
     def complete(self, prompt: str, max_tokens: int = 4096) -> str:
         """Send a prompt to the LLM and return the response text."""
         client = self._get_client()
-        
+
         if self.config.provider == "anthropic":
             response = client.messages.create(
                 model=self.config.model,
@@ -187,6 +183,7 @@ class AIClient:
 # AI Analysis Functions
 # ---------------------------------------------------------------------------
 
+
 def infer_process_flows(
     entry_point_files: list[dict[str, str]],
     ai_client: AIClient,
@@ -194,34 +191,34 @@ def infer_process_flows(
 ) -> list[ProcessFlow]:
     """
     Use AI to infer process flows from entry point source code.
-    
+
     Args:
         entry_point_files: List of dicts with keys: path, language, entry_type, dependencies
         ai_client: Configured AI client
         repo_path: Repository root path
-    
+
     Returns:
         List of ProcessFlow objects
     """
     flows: list[ProcessFlow] = []
-    
+
     for ep in entry_point_files:
         file_path = repo_path / ep["path"]
         if not file_path.exists():
             continue
-        
+
         try:
             code = file_path.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
-        
+
         # Truncate very long files to fit context window
         if len(code) > 15000:
             code = code[:15000] + "\n# ... (truncated)"
-        
+
         # Build dependency context
         dep_context = ep.get("dependencies", "No additional context available.")
-        
+
         prompt = PROCESS_FLOW_PROMPT.format(
             file_path=ep["path"],
             entry_type=ep.get("entry_type", "http_handler"),
@@ -229,11 +226,11 @@ def infer_process_flows(
             code=code,
             dependency_context=dep_context,
         )
-        
+
         try:
             response = ai_client.complete(prompt)
             flow_data = _parse_json_response(response)
-            
+
             if flow_data:
                 flow = ProcessFlow(
                     id=f"flow:{ep['path']}",
@@ -258,7 +255,7 @@ def infer_process_flows(
                 logger.info(f"Inferred flow: {flow.name} ({len(flow.steps)} steps)")
         except Exception as e:
             logger.warning(f"AI flow inference failed for {ep['path']}: {e}")
-    
+
     return flows
 
 
@@ -268,31 +265,27 @@ def generate_module_summaries(
 ) -> dict[str, dict[str, str]]:
     """
     Generate AI-powered summaries for each module.
-    
+
     Returns dict: module_id -> {"summary": ..., "responsibility": ..., "suggested_capability": ...}
     """
     summaries: dict[str, dict[str, str]] = {}
     module_nodes = snapshot.get_module_nodes()
-    
+
     for node in module_nodes:
         # Build context for the prompt
         children = snapshot.get_children(node.id)
         symbols = ", ".join(c.name for c in children[:20])
-        
+
         # Find dependencies
-        deps = [
-            e.target.replace("module:", "")
-            for e in snapshot.edges
-            if e.source == node.id
-        ]
-        
+        deps = [e.target.replace("module:", "") for e in snapshot.edges if e.source == node.id]
+
         prompt = MODULE_SUMMARY_PROMPT.format(
             module_name=node.name,
             file_list=node.file_path or "N/A",
             symbols=symbols or "N/A",
             dependencies=", ".join(deps) if deps else "None",
         )
-        
+
         try:
             response = ai_client.complete(prompt, max_tokens=500)
             result = _parse_json_response(response)
@@ -301,7 +294,7 @@ def generate_module_summaries(
                 node.ai_summary = result.get("summary", "")
         except Exception as e:
             logger.warning(f"AI summary failed for {node.name}: {e}")
-    
+
     return summaries
 
 
@@ -317,13 +310,13 @@ def detect_patterns(
         deps = [e.target.replace("module:", "") for e in snapshot.edges if e.source == node.id]
         dep_str = " -> " + ", ".join(deps) if deps else " (no dependencies)"
         module_graph_lines.append(f"  {node.name}{dep_str}")
-    
+
     prompt = PATTERN_DETECTION_PROMPT.format(
         project_name=snapshot.project_name,
         module_graph="\n".join(module_graph_lines),
         directory_structure=directory_tree[:3000],
     )
-    
+
     try:
         response = ai_client.complete(prompt, max_tokens=1000)
         result = _parse_json_response(response)
@@ -331,12 +324,11 @@ def detect_patterns(
             return [
                 ArchPattern(p)
                 for p in result["patterns"]
-                if p in ArchPattern.__members__.values()
-                or p in [e.value for e in ArchPattern]
+                if p in ArchPattern.__members__.values() or p in [e.value for e in ArchPattern]
             ]
     except Exception as e:
         logger.warning(f"AI pattern detection failed: {e}")
-    
+
     return []
 
 
@@ -344,7 +336,8 @@ def detect_patterns(
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _parse_json_response(text: str) -> Optional[dict[str, Any]]:
+
+def _parse_json_response(text: str) -> dict[str, Any] | None:
     """Parse JSON from an LLM response, handling common formatting issues."""
     # Strip markdown code fences if present
     text = text.strip()
@@ -354,7 +347,7 @@ def _parse_json_response(text: str) -> Optional[dict[str, Any]]:
         if text.endswith("```"):
             text = text[:-3]
         text = text.strip()
-    
+
     try:
         return json.loads(text)
     except json.JSONDecodeError:
@@ -366,6 +359,6 @@ def _parse_json_response(text: str) -> Optional[dict[str, Any]]:
                 return json.loads(text[start:end])
             except json.JSONDecodeError:
                 pass
-    
+
     logger.warning("Failed to parse JSON from AI response")
     return None

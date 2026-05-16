@@ -17,12 +17,11 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 
-def create_app(repo_path: str | Path, use_ai: bool = False) -> "Flask":  # type: ignore[name-defined]
+def create_app(repo_path: str | Path, use_ai: bool = False) -> Flask:  # type: ignore[name-defined]  # noqa: F821
     """
     Create and configure the Flask application.
 
@@ -31,12 +30,9 @@ def create_app(repo_path: str | Path, use_ai: bool = False) -> "Flask":  # type:
         use_ai:     Whether to enable AI-powered diagram enrichment.
     """
     try:
-        from flask import Flask, jsonify, render_template_string, request  # type: ignore[import]
-    except ImportError:
-        raise RuntimeError(
-            "Flask is required for the viewer. "
-            "Install with: pip install archilens[viewer]"
-        )
+        from flask import Flask, jsonify, render_template_string  # type: ignore[import]
+    except ImportError as exc:
+        raise RuntimeError("Flask is required for the viewer. Install with: pip install archilens[viewer]") from exc
 
     from archilens.config import load_config
     from archilens.engine import analyze_repository
@@ -86,21 +82,25 @@ def create_app(repo_path: str | Path, use_ai: bool = False) -> "Flask":  # type:
 
         for mod in sorted(modules, key=lambda n: n.name):
             safe = mod.name.lower().replace(" ", "_")
-            items.append({
-                "id": f"l2_{safe}",
-                "label": f"  {mod.name}",
-                "level": 2,
-                "module_id": mod.id,
-            })
+            items.append(
+                {
+                    "id": f"l2_{safe}",
+                    "label": f"  {mod.name}",
+                    "level": 2,
+                    "module_id": mod.id,
+                }
+            )
 
         for flow in snapshot.flows:
             safe = flow.name.lower().replace(" ", "_").replace("/", "_")
-            items.append({
-                "id": f"l3_{safe}",
-                "label": f"  ⚡ {flow.name}",
-                "level": 3,
-                "flow_id": flow.id,
-            })
+            items.append(
+                {
+                    "id": f"l3_{safe}",
+                    "label": f"  ⚡ {flow.name}",
+                    "level": 3,
+                    "flow_id": flow.id,
+                }
+            )
 
         return jsonify(items)
 
@@ -123,8 +123,11 @@ def create_app(repo_path: str | Path, use_ai: bool = False) -> "Flask":  # type:
         snapshot, _ = _get_snapshot()
         # module_id may be URL-encoded; find by name match
         node = next(
-            (n for n in snapshot.get_module_nodes()
-             if n.id == module_id or n.name.lower().replace(" ", "_") == module_id),
+            (
+                n
+                for n in snapshot.get_module_nodes()
+                if n.id == module_id or n.name.lower().replace(" ", "_") == module_id
+            ),
             None,
         )
         if node is None:
@@ -141,8 +144,11 @@ def create_app(repo_path: str | Path, use_ai: bool = False) -> "Flask":  # type:
     def diagram_l3(flow_id: str):
         snapshot, _ = _get_snapshot()
         flow = next(
-            (f for f in snapshot.flows
-             if f.id == flow_id or f.name.lower().replace(" ", "_").replace("/", "_") == flow_id),
+            (
+                f
+                for f in snapshot.flows
+                if f.id == flow_id or f.name.lower().replace(" ", "_").replace("/", "_") == flow_id
+            ),
             None,
         )
         if flow is None:
@@ -160,16 +166,18 @@ def create_app(repo_path: str | Path, use_ai: bool = False) -> "Flask":  # type:
     @app.route("/api/modules")
     def modules():
         snapshot, _ = _get_snapshot()
-        return jsonify([
-            {
-                "id": n.id,
-                "name": n.name,
-                "loc": n.lines_of_code,
-                "capability": n.capability,
-                "summary": n.ai_summary,
-            }
-            for n in snapshot.get_module_nodes()
-        ])
+        return jsonify(
+            [
+                {
+                    "id": n.id,
+                    "name": n.name,
+                    "loc": n.lines_of_code,
+                    "capability": n.capability,
+                    "summary": n.ai_summary,
+                }
+                for n in snapshot.get_module_nodes()
+            ]
+        )
 
     @app.route("/api/module-map")
     def module_map():
@@ -180,10 +188,7 @@ def create_app(repo_path: str | Path, use_ai: bool = False) -> "Flask":  # type:
         The browser uses this map to wire click-to-drill-down on SVG nodes.
         """
         snapshot, _ = _get_snapshot()
-        mapping = {
-            _sanitize_for_mermaid(n.id): n.id
-            for n in snapshot.get_module_nodes()
-        }
+        mapping = {_sanitize_for_mermaid(n.id): n.id for n in snapshot.get_module_nodes()}
         return jsonify(mapping)
 
     @app.route("/api/refresh")
@@ -211,6 +216,7 @@ def _sanitize_for_mermaid(raw: str) -> str:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _extract_mermaid(markdown: str) -> str:
     """Pull the Mermaid code block out of a generated markdown string."""

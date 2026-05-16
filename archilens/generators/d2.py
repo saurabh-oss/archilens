@@ -12,10 +12,6 @@ Render:     d2 L1_module_architecture.d2 architecture.svg
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Optional
-
-from archilens.config import ArchiLensConfig
 from archilens.generators.base import DiagramGenerator
 from archilens.models import (
     ArchSnapshot,
@@ -45,8 +41,8 @@ class D2Generator(DiagramGenerator):
         sys_id = _id(snapshot.project_name)
         lines.append(f"{sys_id}: {snapshot.project_name} {{")
         lines.append("  shape: rectangle")
-        lines.append("  style.fill: \"#1168bd\"")
-        lines.append("  style.font-color: \"#ffffff\"")
+        lines.append('  style.fill: "#1168bd"')
+        lines.append('  style.font-color: "#ffffff"')
         lines.append("}")
         lines.append("")
 
@@ -56,19 +52,16 @@ class D2Generator(DiagramGenerator):
             shape = "cylinder" if ext.type in ("database", "cache") else "rectangle"
             lines.append(f"{ext_id}: {ext.name} {{")
             lines.append(f"  shape: {shape}")
-            lines.append("  style.fill: \"#999999\"")
-            lines.append("  style.font-color: \"#ffffff\"")
+            lines.append('  style.fill: "#999999"')
+            lines.append('  style.font-color: "#ffffff"')
             if ext.description:
-                lines.append(f"  tooltip: \"{ext.description}\"")
+                lines.append(f'  tooltip: "{ext.description}"')
             lines.append("}")
             lines.append(f"{sys_id} -> {ext_id}")
             lines.append("")
 
         # User actor if flows suggest HTTP
-        has_http = any(
-            f.trigger.startswith(("GET", "POST", "PUT", "DELETE", "PATCH"))
-            for f in snapshot.flows
-        )
+        has_http = any(f.trigger.startswith(("GET", "POST", "PUT", "DELETE", "PATCH")) for f in snapshot.flows)
         if has_http:
             lines.append("user: User / Client {")
             lines.append("  shape: person")
@@ -115,10 +108,10 @@ class D2Generator(DiagramGenerator):
                     if node.lines_of_code:
                         label += f"\\n{node.lines_of_code:,} LOC"
                     lines.append(f"  {nid}: {_quote(label)} {{")
-                    lines.append("    style.fill: \"#1168bd\"")
-                    lines.append("    style.font-color: \"#ffffff\"")
+                    lines.append('    style.fill: "#1168bd"')
+                    lines.append('    style.font-color: "#ffffff"')
                     if node.ai_summary:
-                        lines.append(f"    tooltip: \"{node.ai_summary[:120]}\"")
+                        lines.append(f'    tooltip: "{node.ai_summary[:120]}"')
                     lines.append("  }")
                     grouped.add(mod_id)
             lines.append("}")
@@ -132,10 +125,10 @@ class D2Generator(DiagramGenerator):
                 if node.lines_of_code:
                     label += f"\\n{node.lines_of_code:,} LOC"
                 lines.append(f"{nid}: {_quote(label)} {{")
-                lines.append("  style.fill: \"#438dd5\"")
-                lines.append("  style.font-color: \"#ffffff\"")
+                lines.append('  style.fill: "#438dd5"')
+                lines.append('  style.font-color: "#ffffff"')
                 if node.ai_summary:
-                    lines.append(f"  tooltip: \"{node.ai_summary[:120]}\"")
+                    lines.append(f'  tooltip: "{node.ai_summary[:120]}"')
                 lines.append("}")
 
         lines.append("")
@@ -156,7 +149,7 @@ class D2Generator(DiagramGenerator):
     # L2: Component Detail
     # -------------------------------------------------------------------
 
-    def component_detail(self, snapshot: ArchSnapshot, module_id: str) -> Optional[str]:
+    def component_detail(self, snapshot: ArchSnapshot, module_id: str) -> str | None:
         children = snapshot.get_children(module_id)
         if not children:
             return None
@@ -244,6 +237,7 @@ class D2Generator(DiagramGenerator):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _id(raw: str) -> str:
     """Convert an arbitrary string to a valid D2 identifier."""

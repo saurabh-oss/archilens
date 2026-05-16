@@ -9,9 +9,9 @@ the architecture dependency graph.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 import networkx as nx
 
@@ -30,8 +30,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Language-specific import extraction (regex-based fallback)
 # ---------------------------------------------------------------------------
-
-import re
 
 # Patterns for extracting imports across languages
 IMPORT_PATTERNS: dict[str, list[re.Pattern[str]]] = {
@@ -93,8 +91,9 @@ FUNCTION_PATTERNS: dict[str, list[re.Pattern[str]]] = {
 @dataclass
 class ImportInfo:
     """An extracted import statement."""
-    source_file: str      # File containing the import
-    imported_path: str     # What was imported (module path or package)
+
+    source_file: str  # File containing the import
+    imported_path: str  # What was imported (module path or package)
     is_relative: bool = False
     is_external: bool = False  # Third-party package
 
@@ -102,6 +101,7 @@ class ImportInfo:
 @dataclass
 class ClassInfo:
     """An extracted class definition."""
+
     name: str
     file_path: str
     parent_classes: list[str] = field(default_factory=list)
@@ -112,11 +112,12 @@ class ClassInfo:
 @dataclass
 class FunctionInfo:
     """An extracted function/method definition."""
+
     name: str
     file_path: str
     line_number: int = 0
     is_method: bool = False
-    parent_class: Optional[str] = None
+    parent_class: str | None = None
 
 
 def analyze_dependencies(
@@ -168,18 +169,19 @@ def analyze_dependencies(
         except Exception as exc:
             logger.warning(
                 "Error analysing %s — skipping file (%s)",
-                source_file.relative_path, exc,
+                source_file.relative_path,
+                exc,
             )
         finally:
             if progress_cb:
                 progress_cb(source_file.relative_path)
-    
+
     # Phase 2: Build module-level nodes (L1)
     nodes: list[ArchNode] = []
     for mod_name, mod in modules.items():
         if all(f.is_test for f in mod.files):
             continue  # Skip test-only modules
-        
+
         node = ArchNode(
             id=f"module:{mod_name}",
             name=_humanize_module_name(mod_name),
@@ -190,12 +192,12 @@ def analyze_dependencies(
             children=[],
         )
         nodes.append(node)
-    
+
     # Phase 3: Build component-level nodes (L2) from classes
     for cls in all_classes:
         module_name = _file_to_module(cls.file_path)
         parent_id = f"module:{module_name}"
-        
+
         node = ArchNode(
             id=f"class:{cls.file_path}:{cls.name}",
             name=cls.name,
@@ -206,35 +208,33 @@ def analyze_dependencies(
             parent=parent_id,
         )
         nodes.append(node)
-        
+
         # Register as child of parent module
         for n in nodes:
             if n.id == parent_id:
                 n.children.append(node.id)
                 break
-    
+
     # Phase 4: Resolve imports into edges
     edges: list[ArchEdge] = []
     module_names = set(modules.keys())
-    
+
     # Build a lookup: file path -> module name
     file_to_module_map: dict[str, str] = {}
     for f in files:
         file_to_module_map[f.relative_path] = f.module
-    
+
     # Aggregate imports at module level
     module_deps: dict[tuple[str, str], int] = {}
-    
+
     for imp in all_imports:
         source_module = file_to_module_map.get(imp.source_file, "<unknown>")
-        target_module = _resolve_import_to_module(
-            imp.imported_path, source_module, module_names, imp.is_relative
-        )
-        
+        target_module = _resolve_import_to_module(imp.imported_path, source_module, module_names, imp.is_relative)
+
         if target_module and target_module != source_module:
             key = (source_module, target_module)
             module_deps[key] = module_deps.get(key, 0) + 1
-    
+
     for (src, tgt), weight in module_deps.items():
         edge = ArchEdge(
             source=f"module:{src}",
@@ -244,7 +244,7 @@ def analyze_dependencies(
             weight=weight,
         )
         edges.append(edge)
-    
+
     # Phase 5: Build inheritance edges (L2)
     class_names_map = {cls.name: cls for cls in all_classes}
     for cls in all_classes:
@@ -259,7 +259,7 @@ def analyze_dependencies(
                     label="extends",
                 )
                 edges.append(edge)
-    
+
     # Phase 6: Build NetworkX graph for analysis
     graph = nx.DiGraph()
     for node in nodes:
@@ -267,21 +267,21 @@ def analyze_dependencies(
     for edge in edges:
         if graph.has_node(edge.source) and graph.has_node(edge.target):
             graph.add_edge(edge.source, edge.target, data=edge)
-    
+
     return nodes, edges, graph
 
 
 def compute_metrics(graph: nx.DiGraph) -> dict[str, dict[str, float]]:
     """Compute architectural metrics from the dependency graph."""
     metrics: dict[str, dict[str, float]] = {}
-    
+
     for node_id in graph.nodes:
         metrics[node_id] = {
             "fan_in": graph.in_degree(node_id),
             "fan_out": graph.out_degree(node_id),
             "betweenness": 0.0,
         }
-    
+
     # Betweenness centrality (how much a module is a "bridge")
     if len(graph.nodes) > 2:
         try:
@@ -290,7 +290,7 @@ def compute_metrics(graph: nx.DiGraph) -> dict[str, dict[str, float]]:
                 metrics[node_id]["betweenness"] = round(value, 4)
         except Exception:
             pass
-    
+
     # Detect cycles (architectural smell)
     try:
         cycles = list(nx.simple_cycles(graph))
@@ -299,13 +299,14 @@ def compute_metrics(graph: nx.DiGraph) -> dict[str, dict[str, float]]:
                 metrics.setdefault(node_id, {})["in_cycle"] = 1.0
     except Exception:
         pass
-    
+
     return metrics
 
 
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
+
 
 def _extract_imports(content: str, source_file: SourceFile) -> list[ImportInfo]:
     """Extract import statements, preferring Tree-sitter over regex."""
@@ -330,12 +331,14 @@ def _extract_imports(content: str, source_file: SourceFile) -> list[ImportInfo]:
         for match in pattern.finditer(content):
             imported = match.group(1)
             is_relative = imported.startswith(".")
-            imports.append(ImportInfo(
-                source_file=source_file.relative_path,
-                imported_path=imported,
-                is_relative=is_relative,
-                is_external=_is_external_import(imported),
-            ))
+            imports.append(
+                ImportInfo(
+                    source_file=source_file.relative_path,
+                    imported_path=imported,
+                    is_relative=is_relative,
+                    is_external=_is_external_import(imported),
+                )
+            )
     return imports
 
 
@@ -364,13 +367,15 @@ def _extract_classes(content: str, source_file: SourceFile) -> list[ClassInfo]:
             parents: list[str] = []
             if match.lastindex and match.lastindex >= 2 and match.group(2):
                 parents = [p.strip() for p in match.group(2).split(",") if p.strip()]
-            line_num = content[:match.start()].count("\n") + 1
-            classes.append(ClassInfo(
-                name=name,
-                file_path=source_file.relative_path,
-                parent_classes=parents,
-                line_number=line_num,
-            ))
+            line_num = content[: match.start()].count("\n") + 1
+            classes.append(
+                ClassInfo(
+                    name=name,
+                    file_path=source_file.relative_path,
+                    parent_classes=parents,
+                    line_number=line_num,
+                )
+            )
     return classes
 
 
@@ -397,22 +402,20 @@ def _extract_functions(content: str, source_file: SourceFile) -> list[FunctionIn
             name = match.group(1)
             if name.startswith("__") and name.endswith("__"):
                 continue
-            line_num = content[:match.start()].count("\n") + 1
-            functions.append(FunctionInfo(
-                name=name,
-                file_path=source_file.relative_path,
-                line_number=line_num,
-            ))
+            line_num = content[: match.start()].count("\n") + 1
+            functions.append(
+                FunctionInfo(
+                    name=name,
+                    file_path=source_file.relative_path,
+                    line_number=line_num,
+                )
+            )
     return functions
 
 
 def _is_external_import(path: str) -> bool:
     """Heuristic: path looks like a third-party package rather than a local module."""
-    return (
-        not path.startswith(".")
-        and "/" not in path
-        and not path.startswith("src")
-    )
+    return not path.startswith(".") and "/" not in path and not path.startswith("src")
 
 
 def _resolve_import_to_module(
@@ -420,7 +423,7 @@ def _resolve_import_to_module(
     source_module: str,
     known_modules: set[str],
     is_relative: bool,
-) -> Optional[str]:
+) -> str | None:
     """Resolve an import path to a known module name."""
     # For relative imports, resolve against source module
     if is_relative:
@@ -429,14 +432,14 @@ def _resolve_import_to_module(
         resolved = "/".join(parts[:-1] + imported_parts[:2])
         if resolved in known_modules:
             return resolved
-    
+
     # Try direct match: "src.orders.service" -> "src/orders"
     parts = imported_path.replace(".", "/").split("/")
     for depth in [2, 1]:
         candidate = "/".join(parts[:depth])
         if candidate in known_modules:
             return candidate
-    
+
     return None
 
 

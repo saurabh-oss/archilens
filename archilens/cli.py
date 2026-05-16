@@ -10,7 +10,6 @@ Usage:
 
 from __future__ import annotations
 
-import json
 import logging
 import sys
 from pathlib import Path
@@ -19,7 +18,6 @@ import click
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.table import Table
-from rich.tree import Tree
 
 console = Console(highlight=False)
 
@@ -68,9 +66,9 @@ def analyze(
 ) -> None:
     """Analyze a repository and generate architecture diagrams."""
     _setup_logging(verbose)
-    
+
+    from archilens.config import ConfigError, load_config
     from archilens.engine import analyze_repository, generate_diagrams
-    from archilens.config import load_config, ConfigError
 
     repo_path = Path(repo).resolve()
     if not repo_path.exists():
@@ -82,31 +80,29 @@ def analyze(
     except ConfigError as exc:
         console.print(f"[red]Config error:[/] {exc}")
         sys.exit(1)
-    
+
     # Override config with CLI options
     if fmt != "mermaid":
         config.diagrams.format = fmt
-    
+
     if level is not None:
         for lc in config.diagrams.levels:
             lc["enabled"] = lc["level"] == level
-    
+
     with console.status("[bold blue]Analyzing repository..."):
-        snapshot = analyze_repository(
-            repo_path, config, use_ai=not no_ai
-        )
-    
+        snapshot = analyze_repository(repo_path, config, use_ai=not no_ai)
+
     if json_output:
         console.print_json(snapshot.model_dump_json(indent=2))
         return
-    
+
     # Display summary
     _print_summary(snapshot)
-    
+
     # Generate diagrams
     out_dir = output or str(repo_path / config.diagrams.output_dir)
     diagrams = generate_diagrams(snapshot, config, out_dir)
-    
+
     console.print()
     console.print(f"{_OK} Generated {len(diagrams)} diagrams in [bold]{out_dir}[/]")
     for d in diagrams:
@@ -126,9 +122,9 @@ def diff(repo: str, base: str, head: str, output: str | None, verbose: bool) -> 
     """Compare architecture between two Git refs (drift detection)."""
     _setup_logging(verbose)
 
-    from archilens.analyzers.diff import compute_diff, check_rules, format_diff_as_markdown
+    from archilens.analyzers.diff import check_rules, compute_diff, format_diff_as_markdown
     from archilens.analyzers.git_utils import checkout_ref, resolve_ref
-    from archilens.config import load_config, ConfigError
+    from archilens.config import ConfigError, load_config
     from archilens.engine import analyze_repository
 
     repo_path = Path(repo).resolve()
@@ -148,13 +144,11 @@ def diff(repo: str, base: str, head: str, output: str | None, verbose: bool) -> 
     console.print(f"Comparing [bold]{base}[/] ({base_sha[:8]}) -> [bold]{head}[/] ({head_sha[:8]})")
 
     try:
-        with console.status(f"[bold blue]Extracting {base}..."):
-            with checkout_ref(repo_path, base) as base_dir:
-                base_snapshot = analyze_repository(base_dir, config, use_ai=False, git_ref=base)
+        with console.status(f"[bold blue]Extracting {base}..."), checkout_ref(repo_path, base) as base_dir:
+            base_snapshot = analyze_repository(base_dir, config, use_ai=False, git_ref=base)
 
-        with console.status(f"[bold blue]Extracting {head}..."):
-            with checkout_ref(repo_path, head) as head_dir:
-                head_snapshot = analyze_repository(head_dir, config, use_ai=False, git_ref=head)
+        with console.status(f"[bold blue]Extracting {head}..."), checkout_ref(repo_path, head) as head_dir:
+            head_snapshot = analyze_repository(head_dir, config, use_ai=False, git_ref=head)
 
     except RuntimeError as exc:
         console.print(f"[red]Error:[/] {exc}")
@@ -186,15 +180,16 @@ def init(repo: str) -> None:
     """Initialize a .archilens.yml config file with sensible defaults."""
     repo_path = Path(repo).resolve()
     config_path = repo_path / ".archilens.yml"
-    
+
     if config_path.exists():
         console.print("[yellow]Config file already exists.[/] Use --force to overwrite.")
         return
-    
+
     # Copy the example config
     example_config = Path(__file__).parent.parent / ".archilens.yml"
     if example_config.exists():
         import shutil
+
         shutil.copy(example_config, config_path)
     else:
         # Generate minimal config
@@ -218,7 +213,7 @@ def init(repo: str) -> None:
             '  model: "claude-sonnet-4-20250514"\n',
             encoding="utf-8",
         )
-    
+
     console.print(f"{_OK} Created {config_path}")
     console.print("  Edit this file to customize analysis settings.")
 
@@ -237,8 +232,12 @@ def history(repo: str, refs: str | None, use_tags: bool, max_refs: int, output: 
     """Analyse architecture evolution across git history (tags / refs)."""
     _setup_logging(verbose)
 
-    from archilens.analyzers.evolution import analyze_evolution, generate_timeline_diagram, generate_evolution_report
-    from archilens.config import load_config, ConfigError
+    from archilens.analyzers.evolution import (
+        analyze_evolution,
+        generate_evolution_report,
+        generate_timeline_diagram,
+    )
+    from archilens.config import ConfigError, load_config
 
     repo_path = Path(repo).resolve()
     if not repo_path.exists():
@@ -267,6 +266,7 @@ def history(repo: str, refs: str | None, use_tags: bool, max_refs: int, output: 
 
     # Print summary table
     from rich.table import Table
+
     table = Table(title=f"Architecture Evolution: {timeline.project_name}")
     table.add_column("Ref", style="cyan")
     table.add_column("Date")
@@ -338,7 +338,7 @@ def serve(repo: str, port: int, use_ai: bool, debug: bool) -> None:
         console.print(f"[red]{exc}[/]")
         sys.exit(1)
 
-    console.print(f"[bold blue]ArchiLens Viewer[/]")
+    console.print("[bold blue]ArchiLens Viewer[/]")
     console.print(f"  Repository : [cyan]{repo_path}[/]")
     console.print(f"  AI features: {'[green]enabled[/]' if use_ai else '[dim]disabled (use --ai to enable)[/]'}")
     console.print(f"  URL        : [bold]http://localhost:{port}[/]")
@@ -358,13 +358,14 @@ def serve(repo: str, port: int, use_ai: bool, debug: bool) -> None:
 # Display helpers
 # ---------------------------------------------------------------------------
 
+
 def _print_summary(snapshot) -> None:
     """Print a rich summary of the analysis results."""
     console.print()
     console.print(f"[bold blue]ArchiLens Analysis[/]: {snapshot.project_name}")
     console.print(f"[dim]Ref: {snapshot.git_ref} | {snapshot.timestamp}[/]")
     console.print()
-    
+
     # Module table
     module_nodes = snapshot.get_module_nodes()
     if module_nodes:
@@ -374,7 +375,7 @@ def _print_summary(snapshot) -> None:
         table.add_column("Dependencies", justify="right")
         table.add_column("Capability", style="green")
         table.add_column("Summary")
-        
+
         for node in sorted(module_nodes, key=lambda n: n.lines_of_code, reverse=True):
             deps = sum(1 for e in snapshot.edges if e.source == node.id)
             table.add_row(
@@ -384,15 +385,15 @@ def _print_summary(snapshot) -> None:
                 node.capability or "-",
                 (node.ai_summary or "")[:50],
             )
-        
+
         console.print(table)
-    
+
     # Patterns
     if snapshot.detected_patterns:
         console.print()
         console.print("[bold]Detected Patterns:[/]", end=" ")
         console.print(", ".join(p.value.replace("_", " ").title() for p in snapshot.detected_patterns))
-    
+
     # Flows
     if snapshot.flows:
         console.print()
