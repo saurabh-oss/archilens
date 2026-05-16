@@ -377,28 +377,60 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       background: #21262d;
     }
 
+    /* ── Zoom controls ───────────────────────────────────────────── */
+    #zoom-controls {
+      display: none;
+      align-items: center;
+      gap: 4px;
+      margin-left: auto;
+    }
+    .zoom-btn {
+      background: #21262d;
+      border: 1px solid #30363d;
+      color: #e6edf3;
+      padding: 3px 9px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1.4;
+      transition: background 0.15s;
+    }
+    .zoom-btn:hover { background: #30363d; }
+    #zoom-label {
+      font-size: 12px;
+      color: #8b949e;
+      min-width: 38px;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ── Diagram viewport (scrollable, pannable) ─────────────────── */
     #diagram-area {
       flex: 1;
+      overflow: hidden;
+      position: relative;
+      padding: 0;
+    }
+    #diagram-viewport {
+      width: 100%;
+      height: 100%;
       overflow: auto;
       padding: 24px;
-      display: flex;
-      flex-direction: column;
-      align-items: stretch;
+      cursor: grab;
+      user-select: none;
+      -webkit-user-select: none;
     }
-    #diagram-area .mermaid {
+    #diagram-viewport.grabbing { cursor: grabbing; }
+    #diagram-viewport .mermaid {
+      display: inline-block;
+      transform-origin: top left;
       background: #161b22;
       border: 1px solid #30363d;
       border-radius: 8px;
       padding: 24px;
-      width: 100%;
-      flex: 1;
     }
-    #diagram-area svg {
-      width: 100% !important;
-      max-width: 100% !important;
-      height: auto !important;
-      display: block;
-    }
+    #diagram-viewport svg { display: block; }
+
     #empty-state {
       color: #8b949e;
       text-align: center;
@@ -459,17 +491,26 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
     <div id="diagram-title">
       <span id="level-badge">—</span>
       <span id="title-text">Select a diagram from the sidebar</span>
+      <div id="zoom-controls">
+        <button class="zoom-btn" onclick="zoomOut()" title="Zoom out">−</button>
+        <span id="zoom-label">100%</span>
+        <button class="zoom-btn" onclick="zoomIn()" title="Zoom in">+</button>
+        <button class="zoom-btn" onclick="fitDiagram()" title="Fit to window">Fit</button>
+        <button class="zoom-btn" onclick="resetZoom()" title="Actual size">1:1</button>
+      </div>
     </div>
     <div id="diagram-area">
+      <div id="diagram-viewport">
       <div id="empty-state">
         <h2>Welcome to ArchiLens</h2>
         <p>Select a diagram level from the sidebar on the left.<br>
         The viewer runs the full analysis pipeline in-process.<br>
         Use <strong>↻ Re-analyse</strong> to pick up code changes.</p>
       </div>
-    </div>
-  </div>
-</div>
+      </div><!-- #diagram-viewport -->
+    </div><!-- #diagram-area -->
+  </div><!-- #content -->
+</div><!-- .main -->
 
 <div id="loading">
   <div class="spinner" style="display:block"></div>
@@ -566,9 +607,67 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
     return await res.json();
   }
 
-  // ── Diagram rendering ────────────────────────────────────────────
+  // ── Zoom / pan state ─────────────────────────────────────────────
+  let _zoom = 1.0;
+  const ZOOM_STEP = 0.15, MIN_ZOOM = 0.1, MAX_ZOOM = 5.0;
+
+  function _applyZoom(z) {
+    _zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z));
+    const el = document.querySelector('#diagram-viewport .mermaid');
+    if (el) el.style.transform = `scale(${_zoom})`;
+    document.getElementById('zoom-label').textContent = Math.round(_zoom * 100) + '%';
+  }
+  function zoomIn()    { _applyZoom(_zoom + ZOOM_STEP); }
+  function zoomOut()   { _applyZoom(_zoom - ZOOM_STEP); }
+  function resetZoom() { _applyZoom(1.0); }
+
+  function fitDiagram() {
+    const vp  = document.getElementById('diagram-viewport');
+    const svg = vp.querySelector('svg');
+    if (!svg) return;
+    const vb = svg.viewBox && svg.viewBox.baseVal;
+    if (!vb || !vb.width || !vb.height) return;
+    const pad = 48;
+    const scaleX = (vp.clientWidth  - pad) / vb.width;
+    const scaleY = (vp.clientHeight - pad) / vb.height;
+    _applyZoom(Math.min(scaleX, scaleY));
+    // Scroll to top-left after fitting
+    vp.scrollTop = 0;
+    vp.scrollLeft = 0;
+  }
+
+  // Mouse-wheel zoom centred on cursor
+  document.getElementById('diagram-area').addEventListener('wheel', e => {
+    if (!document.querySelector('#diagram-viewport .mermaid')) return;
+    e.preventDefault();
+    _applyZoom(_zoom * (e.deltaY < 0 ? 1.12 : 0.89));
+  }, { passive: false });
+
+  // Click-drag pan
+  (function() {
+    const vp = document.getElementById('diagram-viewport');
+    let dragging = false, startX, startY, scrollX, scrollY;
+    vp.addEventListener('mousedown', e => {
+      if (e.target.closest('a, button, [data-level]')) return;
+      dragging = true;
+      startX = e.clientX; startY = e.clientY;
+      scrollX = vp.scrollLeft; scrollY = vp.scrollTop;
+      vp.classList.add('grabbing');
+    });
+    window.addEventListener('mousemove', e => {
+      if (!dragging) return;
+      vp.scrollLeft = scrollX - (e.clientX - startX);
+      vp.scrollTop  = scrollY - (e.clientY - startY);
+    });
+    window.addEventListener('mouseup', () => {
+      dragging = false;
+      vp.classList.remove('grabbing');
+    });
+  })();
+
+  // ── Diagram rendering ─────────────────────────────────────────────
   async function renderDiagram(data) {
-    const area = document.getElementById('diagram-area');
+    const vp   = document.getElementById('diagram-viewport');
     const levelColors = { 0: '#ff7b72', 1: '#79c0ff', 2: '#d2a8ff', 3: '#ffa657' };
 
     document.getElementById('title-text').textContent = data.title || '—';
@@ -577,67 +676,59 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
     badge.style.color = levelColors[data.level] || '#8b949e';
 
     if (!data.mermaid || data.empty) {
-      area.innerHTML = '<div id="empty-state"><h2>No components found</h2><p>This module has no detected classes or components.</p></div>';
+      vp.innerHTML = '<div id="empty-state"><h2>No components found</h2><p>This module has no detected classes or components.</p></div>';
+      document.getElementById('zoom-controls').style.display = 'none';
       return;
     }
 
-    // Use textContent (not innerHTML) so <<annotations>> aren't
-    // mangled by the HTML parser before Mermaid reads them.
-    const uid = 'mermaid_' + Date.now();
+    // Use textContent so <<annotations>> aren't eaten by the HTML parser
     const el = document.createElement('div');
     el.className = 'mermaid';
-    el.id = uid;
     el.textContent = data.mermaid;
-    area.innerHTML = '';
-    area.appendChild(el);
+    vp.innerHTML = '';
+    vp.appendChild(el);
 
     try {
       await mermaid.run({ nodes: [el] });
 
-      // Mermaid sets a fixed height="" attribute on the SVG which cannot be
-      // overridden by CSS alone. Remove it so the SVG scales via its viewBox.
+      // Strip Mermaid's fixed height/width attributes so the SVG
+      // scales purely from its viewBox when we apply CSS transforms.
       const svg = el.querySelector('svg');
       if (svg) {
         svg.removeAttribute('height');
-        svg.setAttribute('width', '100%');
-        svg.style.minHeight = '480px';
+        svg.removeAttribute('width');
+        svg.style.display = 'block';
       }
+
+      // Show zoom controls and auto-fit the diagram
+      document.getElementById('zoom-controls').style.display = 'flex';
+      _zoom = 1.0;
+      setTimeout(fitDiagram, 30);
 
       // Wire click-to-drill-down for L1 module nodes
       if (data.level === 1) {
         let modMap = {};
-        try {
-          const r = await fetch('/api/module-map');
-          modMap = await r.json();
-        } catch (_) {}
-
-        // Mermaid renders flowchart nodes as SVG elements with IDs like
-        // "flowchart-{nodeId}-{index}". We strip the prefix and suffix to
-        // recover the sanitised node ID, then look it up in modMap.
-        document.querySelectorAll('[id^="flowchart-"]').forEach(el => {
-          const mermaidId = el.id.replace(/^flowchart-/, '').replace(/-\d+$/, '');
-          const moduleId = modMap[mermaidId];
+        try { modMap = await fetch('/api/module-map').then(r => r.json()); } catch (_) {}
+        document.querySelectorAll('[id^="flowchart-"]').forEach(node => {
+          const mermaidId = node.id.replace(/^flowchart-/, '').replace(/-\d+$/, '');
+          const moduleId  = modMap[mermaidId];
           if (!moduleId) return;
           const l2Item = navItems.find(i => i.level === 2 && i.module_id === moduleId);
           if (!l2Item) return;
-          el.style.cursor = 'pointer';
-          el.title = `Drill into ${l2Item.label.trim()}`;
-          el.addEventListener('click', (e) => {
-            e.stopPropagation();
-            selectItem(l2Item);
-          });
+          node.style.cursor = 'pointer';
+          node.title = `Drill into ${l2Item.label.trim()}`;
+          node.addEventListener('click', e => { e.stopPropagation(); selectItem(l2Item); });
         });
       }
     } catch (e) {
-      area.innerHTML = `<div id="empty-state">
-        <h2>Render error</h2>
-        <p>${e.message}</p>
+      vp.innerHTML = `<div id="empty-state">
+        <h2>Render error</h2><p>${e.message}</p>
         <pre style="text-align:left;font-size:12px;margin-top:12px;color:#8b949e">${data.mermaid}</pre>
       </div>`;
     }
   }
 
-  // ── Refresh ──────────────────────────────────────────────────────
+  // ── Refresh ───────────────────────────────────────────────────────
   async function refreshAnalysis() {
     showLoading('Re-analysing repository…');
     currentId = null;
@@ -645,7 +736,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
     await boot();
   }
 
-  // ── Helpers ──────────────────────────────────────────────────────
+  // ── Helpers ───────────────────────────────────────────────────────
   function showLoading(msg) {
     const el = document.getElementById('loading');
     el.style.display = 'flex';
@@ -655,7 +746,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
     document.getElementById('loading').style.display = 'none';
   }
   function showError(msg) {
-    document.getElementById('diagram-area').innerHTML =
+    document.getElementById('diagram-viewport').innerHTML =
       `<div id="empty-state"><h2>Error</h2><p>${msg}</p></div>`;
   }
 
