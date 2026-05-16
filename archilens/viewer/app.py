@@ -382,15 +382,23 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       overflow: auto;
       padding: 24px;
       display: flex;
-      align-items: flex-start;
-      justify-content: center;
+      flex-direction: column;
+      align-items: stretch;
     }
     #diagram-area .mermaid {
       background: #161b22;
       border: 1px solid #30363d;
       border-radius: 8px;
       padding: 24px;
-      max-width: 100%;
+      width: 100%;
+      flex: 1;
+    }
+    #diagram-area svg {
+      width: 100% !important;
+      max-width: 100% !important;
+      height: auto !important;
+      min-height: 420px;
+      display: block;
     }
     #empty-state {
       color: #8b949e;
@@ -574,12 +582,18 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       return;
     }
 
-    // Unique element ID so mermaid re-renders each time
+    // Use textContent (not innerHTML) so <<annotations>> aren't
+    // mangled by the HTML parser before Mermaid reads them.
     const uid = 'mermaid_' + Date.now();
-    area.innerHTML = `<div class="mermaid" id="${uid}">${data.mermaid}</div>`;
+    const el = document.createElement('div');
+    el.className = 'mermaid';
+    el.id = uid;
+    el.textContent = data.mermaid;
+    area.innerHTML = '';
+    area.appendChild(el);
 
     try {
-      await mermaid.run({ nodes: [document.getElementById(uid)] });
+      await mermaid.run({ nodes: [el] });
 
       // Wire click-to-drill-down for L1 module nodes
       if (data.level === 1) {
