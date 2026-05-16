@@ -944,7 +944,7 @@
   PS-->>OS: Receipt
   OS->>DB: INSERT order
   OS->>DB: COMMIT
-  OS-->>GW: Order{id, status}
+  OS-->>GW: Order response
   GW-->>User: 201 Created`,
   };
 
@@ -953,8 +953,16 @@
     btn.classList.add('active');
     const wrap = document.getElementById('diagramWrap');
     const uid = 'diag_' + Date.now();
-    wrap.innerHTML = `<div class="mermaid" id="${uid}">${diagrams[key]}</div>`;
-    mermaid.run({ nodes: [document.getElementById(uid)] });
+    // Use textContent (not innerHTML) so that <<Interface>> and other
+    // angle-bracket tokens are not mangled by the HTML parser before
+    // Mermaid gets to read them.
+    const div = document.createElement('div');
+    div.className = 'mermaid';
+    div.id = uid;
+    div.textContent = diagrams[key];
+    wrap.innerHTML = '';
+    wrap.appendChild(div);
+    mermaid.run({ nodes: [div] });
   }
 </script>
 </body>
