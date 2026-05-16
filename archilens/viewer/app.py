@@ -397,7 +397,6 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       width: 100% !important;
       max-width: 100% !important;
       height: auto !important;
-      min-height: 420px;
       display: block;
     }
     #empty-state {
@@ -594,6 +593,15 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
 
     try {
       await mermaid.run({ nodes: [el] });
+
+      // Mermaid sets a fixed height="" attribute on the SVG which cannot be
+      // overridden by CSS alone. Remove it so the SVG scales via its viewBox.
+      const svg = el.querySelector('svg');
+      if (svg) {
+        svg.removeAttribute('height');
+        svg.setAttribute('width', '100%');
+        svg.style.minHeight = '480px';
+      }
 
       // Wire click-to-drill-down for L1 module nodes
       if (data.level === 1) {
