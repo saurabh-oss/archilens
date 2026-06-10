@@ -81,7 +81,7 @@ def analyze_repository(
     # Build initial snapshot
     snapshot = ArchSnapshot(
         project_name=config.project_name,
-        version=config.project_type,
+        project_type=config.project_type,
         git_ref=git_ref,
         timestamp=datetime.now(timezone.utc).isoformat(),
         nodes=nodes,

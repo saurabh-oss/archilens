@@ -166,8 +166,8 @@ class ArchSnapshot(BaseModel):
     """Complete architecture state at a point in time."""
 
     project_name: str
-    version: str = ""
-    git_ref: str = ""  # commit SHA or tag
+    project_type: str = ""   # monolith | microservices | library | service
+    git_ref: str = ""        # commit SHA or tag
     timestamp: str = ""
 
     nodes: list[ArchNode] = Field(default_factory=list)
