@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,86 @@ from archilens.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Tool-use schemas (Anthropic structured output)
+# ---------------------------------------------------------------------------
+
+_FLOW_TOOL: dict[str, Any] = {
+    "name": "record_flow",
+    "description": "Record the extracted process flow with all its steps.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "flow_name": {"type": "string", "description": "Descriptive name, e.g. 'Create Order Flow'"},
+            "trigger": {"type": "string", "description": "What initiates this flow, e.g. 'POST /api/orders'"},
+            "description": {"type": "string", "description": "One-sentence summary"},
+            "steps": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "order": {"type": "integer"},
+                        "actor": {"type": "string"},
+                        "action": {"type": "string"},
+                        "target": {"type": "string"},
+                        "data": {"type": "string"},
+                        "is_async": {"type": "boolean"},
+                        "condition": {"type": "string"},
+                    },
+                    "required": ["order", "actor", "action", "target"],
+                },
+            },
+        },
+        "required": ["flow_name", "trigger", "steps"],
+    },
+}
+
+_SUMMARY_TOOL: dict[str, Any] = {
+    "name": "record_summary",
+    "description": "Record a concise module summary.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "summary": {"type": "string", "description": "One sentence describing what this module does"},
+            "responsibility": {"type": "string", "description": "Primary responsibility in 3-5 words"},
+            "suggested_capability": {
+                "type": "string",
+                "description": "Business capability this maps to (e.g. 'Order Management', 'Authentication')",
+            },
+        },
+        "required": ["summary", "responsibility"],
+    },
+}
+
+_PATTERN_TOOL: dict[str, Any] = {
+    "name": "record_patterns",
+    "description": "Record detected architectural patterns.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "patterns": {
+                "type": "array",
+                "items": {
+                    "type": "string",
+                    "enum": [
+                        "mvc", "hexagonal", "layered", "microservices",
+                        "event_driven", "cqrs", "repository", "factory",
+                        "observer", "middleware_chain", "saga", "clean_architecture",
+                    ],
+                },
+                "description": "List of detected pattern names",
+            },
+            "reasoning": {
+                "type": "object",
+                "additionalProperties": {"type": "string"},
+                "description": "Brief explanation per detected pattern",
+            },
+        },
+        "required": ["patterns"],
+    },
+}
 
 
 # ---------------------------------------------------------------------------
@@ -45,29 +126,9 @@ Given the following source code from an entry point (controller/handler/route), 
 Additional context - files that this entry point imports or calls:
 {dependency_context}
 
-Analyze this code and return a JSON array of process flow steps. Each step should have:
-- "order": integer sequence number
-- "actor": the component/service performing the action (use the class/module name)
-- "action": what it does (e.g., "Validates request body", "Queries database")
-- "target": what it interacts with (another service, database, external API, etc.)
-- "data": what data is exchanged (optional)
-- "is_async": boolean, whether the step is asynchronous
-- "condition": guard condition if this is a conditional branch (optional)
+Analyze this code and use the record_flow tool to capture the complete process flow."""
 
-Also provide:
-- "flow_name": a descriptive name for this flow (e.g., "Create Order Flow")
-- "trigger": what initiates this flow (e.g., "POST /api/orders")
-- "description": one-sentence summary
-
-Return ONLY valid JSON, no markdown fences. Structure:
-{{
-  "flow_name": "...",
-  "trigger": "...",
-  "description": "...",
-  "steps": [...]
-}}"""
-
-MODULE_SUMMARY_PROMPT = """You are an expert software architect. Given the following module information, provide a concise one-sentence summary of its responsibility.
+MODULE_SUMMARY_PROMPT = """You are an expert software architect. Given the following module information, provide a concise summary.
 
 **Module:** {module_name}
 **Files:**
@@ -79,12 +140,7 @@ MODULE_SUMMARY_PROMPT = """You are an expert software architect. Given the follo
 **Dependencies (imports from other modules):**
 {dependencies}
 
-Return ONLY a JSON object:
-{{
-  "summary": "One sentence describing what this module does",
-  "responsibility": "Primary responsibility in 3-5 words",
-  "suggested_capability": "Business capability this maps to (e.g., 'Order Management', 'Authentication')"
-}}"""
+Use the record_summary tool to record a one-sentence summary of this module's responsibility."""
 
 PATTERN_DETECTION_PROMPT = """You are an expert software architect. Given the following architecture overview, identify which architectural patterns are present.
 
@@ -95,27 +151,7 @@ PATTERN_DETECTION_PROMPT = """You are an expert software architect. Given the fo
 **Directory structure:**
 {directory_structure}
 
-Identify which of these patterns are present:
-- mvc (Model-View-Controller)
-- hexagonal (Ports and Adapters)
-- layered (Traditional layered architecture)
-- microservices (Independent deployable services)
-- event_driven (Event/message-based communication)
-- cqrs (Command Query Responsibility Segregation)
-- repository (Repository pattern for data access)
-- factory (Factory pattern)
-- observer (Observer/pub-sub pattern)
-- middleware_chain (Middleware/pipeline pattern)
-- saga (Saga pattern for distributed transactions)
-- clean_architecture (Clean Architecture / Onion)
-
-Return ONLY a JSON object:
-{{
-  "patterns": ["pattern1", "pattern2"],
-  "reasoning": {{
-    "pattern1": "Brief explanation of why this pattern was detected"
-  }}
-}}"""
+Use the record_patterns tool to record all detected patterns."""
 
 
 # ---------------------------------------------------------------------------
@@ -149,7 +185,6 @@ class AIClient:
             except ImportError as exc:
                 raise RuntimeError("anthropic package not installed. Run: pip install anthropic") from exc
         else:
-            # Use LiteLLM for all other providers
             try:
                 import litellm
 
@@ -159,7 +194,7 @@ class AIClient:
                 raise RuntimeError("litellm package not installed. Run: pip install litellm") from exc
 
     def complete(self, prompt: str, max_tokens: int = 4096) -> str:
-        """Send a prompt to the LLM and return the response text."""
+        """Send a prompt and return the response text."""
         client = self._get_client()
 
         if self.config.provider == "anthropic":
@@ -170,13 +205,52 @@ class AIClient:
             )
             return response.content[0].text
         else:
-            # LiteLLM path
             response = client.completion(
                 model=self.config.model,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=max_tokens,
             )
             return response.choices[0].message.content
+
+    def complete_with_tool(
+        self,
+        prompt: str,
+        tool: dict[str, Any],
+        max_tokens: int = 1024,
+    ) -> dict[str, Any] | None:
+        """
+        Use tool use (structured output) to get deterministic JSON.
+
+        For Anthropic: uses tool_choice={"type":"tool"} for a guaranteed
+        structured response — no fence-stripping or JSON hunting needed.
+        For other providers: falls back to text completion + JSON parsing.
+
+        Returns the tool input dict, or None on failure.
+        """
+        client = self._get_client()
+
+        if self.config.provider == "anthropic":
+            try:
+                response = client.messages.create(
+                    model=self.config.model,
+                    max_tokens=max_tokens,
+                    tools=[{
+                        "name": tool["name"],
+                        "description": tool.get("description", ""),
+                        "input_schema": tool["input_schema"],
+                    }],
+                    tool_choice={"type": "tool", "name": tool["name"]},
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                for block in response.content:
+                    if hasattr(block, "input"):
+                        return block.input  # type: ignore[return-value]
+            except Exception as exc:
+                logger.warning("Tool use failed, falling back to text: %s", exc)
+
+        # Fallback: plain text + JSON parsing (non-Anthropic or on tool-use error)
+        text = self.complete(prompt, max_tokens)
+        return _parse_json_response(text)
 
 
 # ---------------------------------------------------------------------------
@@ -212,24 +286,19 @@ def infer_process_flows(
         except OSError:
             continue
 
-        # Truncate very long files to fit context window
         if len(code) > 15000:
             code = code[:15000] + "\n# ... (truncated)"
-
-        # Build dependency context
-        dep_context = ep.get("dependencies", "No additional context available.")
 
         prompt = PROCESS_FLOW_PROMPT.format(
             file_path=ep["path"],
             entry_type=ep.get("entry_type", "http_handler"),
             language=ep.get("language", "python"),
             code=code,
-            dependency_context=dep_context,
+            dependency_context=ep.get("dependencies", "No additional context available."),
         )
 
         try:
-            response = ai_client.complete(prompt)
-            flow_data = _parse_json_response(response)
+            flow_data = ai_client.complete_with_tool(prompt, _FLOW_TOOL, max_tokens=2048)
 
             if flow_data:
                 flow = ProcessFlow(
@@ -244,17 +313,17 @@ def infer_process_flows(
                             actor=s.get("actor", "Unknown"),
                             action=s.get("action", ""),
                             target=s.get("target", ""),
-                            data=s.get("data"),
+                            data=s.get("data") or None,
                             is_async=s.get("is_async", False),
-                            condition=s.get("condition"),
+                            condition=s.get("condition") or None,
                         )
                         for i, s in enumerate(flow_data.get("steps", []))
                     ],
                 )
                 flows.append(flow)
-                logger.info(f"Inferred flow: {flow.name} ({len(flow.steps)} steps)")
-        except Exception as e:
-            logger.warning(f"AI flow inference failed for {ep['path']}: {e}")
+                logger.info("Inferred flow: %s (%d steps)", flow.name, len(flow.steps))
+        except Exception as exc:
+            logger.warning("AI flow inference failed for %s: %s", ep["path"], exc)
 
     return flows
 
@@ -262,21 +331,20 @@ def infer_process_flows(
 def generate_module_summaries(
     snapshot: ArchSnapshot,
     ai_client: AIClient,
+    max_workers: int = 5,
 ) -> dict[str, dict[str, str]]:
     """
-    Generate AI-powered summaries for each module.
+    Generate AI-powered summaries for each module, running up to *max_workers*
+    completions in parallel via ThreadPoolExecutor.
 
     Returns dict: module_id -> {"summary": ..., "responsibility": ..., "suggested_capability": ...}
     """
     summaries: dict[str, dict[str, str]] = {}
     module_nodes = snapshot.get_module_nodes()
 
-    for node in module_nodes:
-        # Build context for the prompt
+    def _summarize_one(node) -> tuple[str, dict[str, str] | None]:
         children = snapshot.get_children(node.id)
         symbols = ", ".join(c.name for c in children[:20])
-
-        # Find dependencies
         deps = [e.target.replace("module:", "") for e in snapshot.edges if e.source == node.id]
 
         prompt = MODULE_SUMMARY_PROMPT.format(
@@ -287,13 +355,26 @@ def generate_module_summaries(
         )
 
         try:
-            response = ai_client.complete(prompt, max_tokens=500)
-            result = _parse_json_response(response)
-            if result:
-                summaries[node.id] = result
-                node.ai_summary = result.get("summary", "")
-        except Exception as e:
-            logger.warning(f"AI summary failed for {node.name}: {e}")
+            result = ai_client.complete_with_tool(prompt, _SUMMARY_TOOL, max_tokens=500)
+            return node.id, result
+        except Exception as exc:
+            logger.warning("AI summary failed for %s: %s", node.name, exc)
+            return node.id, None
+
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = {pool.submit(_summarize_one, node): node for node in module_nodes}
+        for future in as_completed(futures):
+            try:
+                node_id, result = future.result()
+                if result:
+                    summaries[node_id] = result
+                    # Write ai_summary back onto the node in-place
+                    for node in module_nodes:
+                        if node.id == node_id:
+                            node.ai_summary = result.get("summary", "")
+                            break
+            except Exception as exc:
+                logger.warning("Summary future failed: %s", exc)
 
     return summaries
 
@@ -304,7 +385,6 @@ def detect_patterns(
     ai_client: AIClient,
 ) -> list[ArchPattern]:
     """Use AI to detect architectural patterns in the codebase."""
-    # Build module graph description
     module_graph_lines: list[str] = []
     for node in snapshot.get_module_nodes():
         deps = [e.target.replace("module:", "") for e in snapshot.edges if e.source == node.id]
@@ -318,16 +398,12 @@ def detect_patterns(
     )
 
     try:
-        response = ai_client.complete(prompt, max_tokens=1000)
-        result = _parse_json_response(response)
+        result = ai_client.complete_with_tool(prompt, _PATTERN_TOOL, max_tokens=1000)
         if result and "patterns" in result:
-            return [
-                ArchPattern(p)
-                for p in result["patterns"]
-                if p in ArchPattern.__members__.values() or p in [e.value for e in ArchPattern]
-            ]
-    except Exception as e:
-        logger.warning(f"AI pattern detection failed: {e}")
+            valid_values = {e.value for e in ArchPattern}
+            return [ArchPattern(p) for p in result["patterns"] if p in valid_values]
+    except Exception as exc:
+        logger.warning("AI pattern detection failed: %s", exc)
 
     return []
 
@@ -338,8 +414,10 @@ def detect_patterns(
 
 
 def _parse_json_response(text: str) -> dict[str, Any] | None:
-    """Parse JSON from an LLM response, handling common formatting issues."""
-    # Strip markdown code fences if present
+    """
+    Parse JSON from an LLM response for non-Anthropic providers that don't
+    support tool use.  Handles markdown code fences and partial wrapping.
+    """
     text = text.strip()
     if text.startswith("```"):
         lines = text.split("\n")
@@ -351,7 +429,6 @@ def _parse_json_response(text: str) -> dict[str, Any] | None:
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        # Try to find JSON object in the response
         start = text.find("{")
         end = text.rfind("}") + 1
         if start >= 0 and end > start:
