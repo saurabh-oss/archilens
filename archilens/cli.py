@@ -318,6 +318,76 @@ def history(repo: str, refs: str | None, use_tags: bool, max_refs: int, output: 
 
 
 # ---------------------------------------------------------------------------
+# serve-mcp (MCP server for AI agents)
+# ---------------------------------------------------------------------------
+@main.command("serve-mcp")
+@click.option("--repo", "-r", default=".", help="Path to the Git repository")
+@click.option(
+    "--transport", "-t",
+    default="stdio",
+    type=click.Choice(["stdio", "sse"]),
+    show_default=True,
+    help="MCP transport: stdio (Claude Code / Cursor) or sse (HTTP endpoint)",
+)
+@click.option("--port", "-p", default=8766, show_default=True, help="Port for SSE transport")
+@click.option("--refresh", is_flag=True, help="Force re-analysis, ignore snapshot cache")
+@click.option("--verbose", "-v", is_flag=True)
+def serve_mcp(repo: str, transport: str, port: int, refresh: bool, verbose: bool) -> None:
+    """Launch the ArchiLens MCP server for AI coding agents (Claude Code, Cursor, etc.)."""
+    _setup_logging(verbose)
+
+    repo_path = Path(repo).resolve()
+    if not repo_path.exists():
+        # For stdio transport stderr is safe; for sse stdout is fine too
+        click.echo(f"Repository path does not exist: {repo_path}", err=True)
+        sys.exit(1)
+
+    try:
+        from archilens.mcp.server import create_mcp_server, init_server
+    except ImportError:
+        click.echo(
+            "MCP dependencies not installed. Run: pip install 'archilens[mcp]'",
+            err=True,
+        )
+        sys.exit(1)
+
+    if refresh:
+        from archilens.mcp.cache import invalidate_cache
+        invalidate_cache(repo_path)
+        click.echo(f"Cache invalidated for {repo_path.name}", err=True)
+
+    init_server(repo_path)
+
+    if transport == "sse":
+        console.print("[bold blue]ArchiLens MCP Server[/] (SSE transport)")
+        console.print(f"  Repository : [cyan]{repo_path}[/]")
+        console.print(f"  Endpoint   : [bold]http://localhost:{port}/sse[/]")
+        console.print()
+        console.print("Add to your MCP client config:")
+        console.print(f'  {{"url": "http://localhost:{port}/sse"}}')
+        console.print()
+    else:
+        # stdio: print setup instructions to stderr only — stdout is the MCP wire protocol
+        click.echo(f"ArchiLens MCP Server (stdio) — repo: {repo_path}", err=True)
+        click.echo(
+            "Add to Claude Code ~/.claude/claude_desktop_config.json:\n"
+            '  "mcpServers": {\n'
+            '    "archilens": {\n'
+            '      "command": "archilens",\n'
+            f'      "args": ["serve-mcp", "--repo", "{repo_path}"]\n'
+            '    }\n'
+            "  }",
+            err=True,
+        )
+
+    mcp_server = create_mcp_server()
+    if transport == "sse":
+        mcp_server.run(transport="sse", host="0.0.0.0", port=port)
+    else:
+        mcp_server.run(transport="stdio")
+
+
+# ---------------------------------------------------------------------------
 # serve (interactive viewer)
 # ---------------------------------------------------------------------------
 @main.command()
