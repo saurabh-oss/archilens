@@ -18,7 +18,7 @@ inputs:
     required: false
     default: "true"
   fail-on-violations:
-    description: "Fail the workflow if architecture rules are violated"
+    description: "Fail the workflow if architecture rules with action 'fail' are violated"
     required: false
     default: "false"
   diagrams-output:
@@ -29,16 +29,19 @@ inputs:
 outputs:
   diagrams-path:
     description: "Path to generated diagrams"
+    value: ${{ inputs.diagrams-output }}
   has-changes:
-    description: "Whether architecture changed from base"
+    description: "Whether architecture changed from base (pull requests only)"
+    value: ${{ steps.drift.outputs.has-changes }}
   violations-count:
-    description: "Number of architecture rule violations"
+    description: "Number of architecture rule violations (pull requests only)"
+    value: ${{ steps.drift.outputs.violations-count }}
 
 runs:
   using: "composite"
   steps:
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v7
       with:
         python-version: "3.12"
 
@@ -59,38 +62,61 @@ runs:
           --verbose
 
     - name: Architecture Drift Detection (PR)
-      if: github.event_name == 'pull_request' && inputs.comment-on-pr == 'true'
+      id: drift
+      if: github.event_name == 'pull_request'
       shell: bash
-      env:
-        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
       run: |
+        report="$RUNNER_TEMP/arch-diff.md"
+        rm -f "$report"
+
+        # Exit code 1 with a report on disk means a rule with action 'fail' was
+        # violated; that is handled by the last step so the PR comment still posts.
+        status=0
         archilens diff \
           --repo "${{ inputs.repo-path }}" \
           --base "${{ github.event.pull_request.base.sha }}" \
           --head "${{ github.event.pull_request.head.sha }}" \
-          > /tmp/arch-diff.md 2>&1 || true
+          --output "$report" > /dev/null || status=$?
+
+        # No report means the diff itself could not run (unknown ref, bad config).
+        if [ ! -f "$report" ]; then
+          echo "::error::archilens diff failed (exit code $status). Make sure actions/checkout uses fetch-depth: 0 so the base commit is available."
+          exit 1
+        fi
+
+        if grep -q '^### Changes' "$report"; then
+          echo "has-changes=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "has-changes=false" >> "$GITHUB_OUTPUT"
+        fi
+        echo "violations-count=$(grep -c '^- \[' "$report" || true)" >> "$GITHUB_OUTPUT"
+        echo "report=$report" >> "$GITHUB_OUTPUT"
+        echo "exit-code=$status" >> "$GITHUB_OUTPUT"
 
     - name: Comment on PR
       if: github.event_name == 'pull_request' && inputs.comment-on-pr == 'true'
-      uses: actions/github-script@v7
+      uses: actions/github-script@v9
+      env:
+        ARCHILENS_REPORT: ${{ steps.drift.outputs.report }}
       with:
         script: |
           const fs = require('fs');
-          const diffContent = fs.readFileSync('/tmp/arch-diff.md', 'utf8');
-          
-          // Find existing ArchiLens comment
-          const { data: comments } = await github.rest.issues.listComments({
+          const diffContent = fs.readFileSync(process.env.ARCHILENS_REPORT, 'utf8');
+
+          // Every report starts with this heading; it identifies our earlier comment
+          // so the PR gets one comment that is updated, not one per push.
+          const marker = '## ArchiLens: Architecture Diff';
+
+          const comments = await github.paginate(github.rest.issues.listComments, {
             owner: context.repo.owner,
             repo: context.repo.repo,
             issue_number: context.issue.number,
           });
-          
-          const existingComment = comments.find(c => 
-            c.body.includes('ArchiLens — Architecture Diff')
-          );
-          
-          const body = diffContent || 'No architecture changes detected.';
-          
+
+          const existingComment = comments.find(c => c.body && c.body.includes(marker));
+
+          const body = diffContent || `${marker}\n\nNo architecture changes detected.`;
+
           if (existingComment) {
             await github.rest.issues.updateComment({
               owner: context.repo.owner,
@@ -108,8 +134,15 @@ runs:
           }
 
     - name: Upload Diagrams as Artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: archilens-diagrams
         path: ${{ inputs.diagrams-output }}
         retention-days: 30
+
+    - name: Fail on Rule Violations
+      if: github.event_name == 'pull_request' && inputs.fail-on-violations == 'true' && steps.drift.outputs.exit-code != '0'
+      shell: bash
+      run: |
+        echo "::error::ArchiLens found ${{ steps.drift.outputs.violations-count }} architecture rule violation(s), at least one with action 'fail'. See the PR comment or the diff step for details."
+        exit 1

@@ -9,6 +9,42 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.2.1] — 2026-09-30
+
+### Fixed
+- **Capability mapping and CI rules now match the documented glob style.** A pattern
+  such as `src/orders/**` matches the module `src/orders` itself; previously it matched
+  nothing, so capabilities were never assigned and `no-layer-skip` rules never fired.
+  Matching is now case-sensitive and separator-normalised on every OS. The same fix
+  applies to the MCP `check_dependency_allowed` tool.
+- **`archilens serve-mcp` works again on a fresh install.** The `mcp` extra is pinned to
+  `<2`, because mcp 2.x removed `mcp.server.fastmcp`.
+- **`serve-mcp --transport sse` no longer crashes** with a `TypeError` on startup.
+- **MCP `get_module_context`** returned the parent module for files in a nested module
+  (e.g. `pkg` instead of `pkg/sub`); the most specific module now wins.
+- **`archilens diff` prints only the markdown report on stdout**, unwrapped. Logs and
+  status messages from every command now go to stderr, so `archilens diff > diff.md`
+  and `archilens analyze --json-output > snapshot.json` produce clean files, and the
+  stdio MCP transport is no longer at risk from log lines on stdout.
+- **GitHub Action**: finds and updates its previous PR comment instead of posting a new
+  one on every push; `fail-on-violations` now fails the job when a rule with action
+  `fail` is violated; the `diagrams-path`, `has-changes` and `violations-count` outputs
+  are set; a failed diff is reported as an error instead of being posted as a comment.
+- `archilens.__version__` reported `0.1.0`; the version is now defined once, in
+  `archilens/__init__.py`.
+
+### Changed
+- `serve-mcp` has a new `--host` option for the SSE transport, defaulting to
+  `127.0.0.1` (the previous code intended `0.0.0.0`).
+- Workflows and the composite action use Node 24 releases of the GitHub actions
+  (`checkout@v7`, `setup-python@v7`, `github-script@v9`, `upload-artifact@v7`,
+  `download-artifact@v8`, `codecov-action@v7`).
+- CI lint job is green: Ruff lint and format pass, and mypy strict passes with no errors.
+  CI installs the `viewer` and `mcp` extras so both are tested and type-checked.
+- README, landing page and CONTRIBUTING document installation from PyPI.
+
+---
+
 ## [0.2.0] — 2026-06-10
 
 ### Added
@@ -55,6 +91,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - GitHub Action composite workflow
 - `.archilens.yml` configuration schema
 
-[Unreleased]: https://github.com/saurabh-oss/archilens/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/saurabh-oss/archilens/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/saurabh-oss/archilens/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/saurabh-oss/archilens/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/saurabh-oss/archilens/releases/tag/v0.1.0

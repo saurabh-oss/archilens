@@ -48,13 +48,16 @@ L3: Process Flows          ← Runtime request lifecycles (AI-inferred)
 ### Installation
 
 ```bash
-# From GitHub
-pip install git+https://github.com/saurabh-oss/archilens.git
+# From PyPI
+pip install archilens
+
+# With the interactive web viewer and/or the MCP server
+pip install "archilens[viewer,mcp]"
 
 # From source (development)
 git clone https://github.com/saurabh-oss/archilens.git
 cd archilens
-python -m pip install -e ".[dev]"
+python -m pip install -e ".[dev,viewer,mcp]"
 ```
 
 > **Windows note**: If `pip` is blocked by policy, use `python -m pip install` instead.
@@ -256,15 +259,15 @@ jobs:
   architecture:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
-      - run: pip install git+https://github.com/saurabh-oss/archilens.git
+      - run: pip install archilens
 
       - name: Generate Diagrams
         if: github.event_name == 'push'
@@ -388,14 +391,15 @@ python -m venv .venv
 source .venv/bin/activate   # Linux/Mac
 # .venv\Scripts\activate    # Windows
 
-# Install with dev dependencies
-python -m pip install -e ".[dev]"
+# Install with dev dependencies (viewer and mcp extras are needed by the tests and mypy)
+python -m pip install -e ".[dev,viewer,mcp]"
 
 # Run tests
 pytest tests/ -v --cov=archilens
 
 # Lint
 ruff check archilens/
+ruff format --check archilens/
 mypy archilens/
 ```
 
@@ -414,11 +418,11 @@ mypy archilens/
 - [x] CLI with Rich output (`analyze`, `diff`, `history`, `serve`, `init`)
 - [x] Interactive web viewer with zoom/pan and click-to-drill-down
 - [x] GitHub Pages landing site
+- [x] PyPI release (`pip install archilens`)
 - [ ] VS Code extension
 - [ ] GitHub App (persistent bot with richer PR integration)
 - [ ] Monorepo support (multi-service cross-repo analysis)
 - [ ] OpenTelemetry integration (runtime architecture from traces)
-- [ ] PyPI release
 
 ---
 

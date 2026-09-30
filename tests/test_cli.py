@@ -274,3 +274,92 @@ class TestServe:
         with patch("archilens.viewer.app.create_app", return_value=mock_app) as m:
             runner.invoke(main, ["serve", "--repo", str(tmp_path), "--ai"])
         m.assert_called_once_with(tmp_path.resolve(), use_ai=True)
+
+
+# ---------------------------------------------------------------------------
+# stdout hygiene (stdout is redirected into PR comments / JSON files)
+# ---------------------------------------------------------------------------
+
+def _split_stream_runner() -> CliRunner:
+    """CliRunner with stderr captured separately (click < 8.2 mixes them by default)."""
+    try:
+        return CliRunner(mix_stderr=False)
+    except TypeError:
+        return CliRunner()
+
+
+class TestStdoutHygiene:
+    def test_diff_stdout_is_exactly_the_report(self, tmp_path):
+        from archilens.models import ArchDiff, ArchSnapshot
+        base = ArchSnapshot(project_name="T", git_ref="base")
+        head = ArchSnapshot(project_name="T", git_ref="head")
+        long_row = "| edge | [+] added | New dependency: " + "module:some/very/long/path " * 8 + "| info |"
+        report = "## ArchiLens: Architecture Diff\n\n" + long_row
+
+        with patch("archilens.analyzers.git_utils.resolve_ref", return_value="abc1234def5"),\
+             patch("archilens.analyzers.git_utils.checkout_ref") as mock_ctx, \
+             patch("archilens.engine.analyze_repository", side_effect=[base, head]), \
+             patch("archilens.analyzers.diff.compute_diff",
+                   return_value=ArchDiff(base_ref="base", head_ref="head")), \
+             patch("archilens.analyzers.diff.check_rules", return_value=[]), \
+             patch("archilens.analyzers.diff.format_diff_as_markdown", return_value=report):
+            mock_ctx.return_value.__enter__ = lambda s: tmp_path
+            mock_ctx.return_value.__exit__ = lambda s, *a: False
+            result = _split_stream_runner().invoke(
+                main, ["diff", "--repo", str(tmp_path), "--base", "v1", "--head", "HEAD"]
+            )
+
+        assert result.exit_code == 0
+        # No "Comparing ..." banner, no log lines, and no hard-wrapped table rows.
+        assert result.stdout == report + "\n"
+        assert "Comparing" in result.stderr
+
+    def test_analyze_json_output_is_valid_json_when_redirected(self, minimal_repo):
+        import json
+        import subprocess
+        import sys
+
+        proc = subprocess.run(
+            [sys.executable, "-m", "archilens", "analyze",
+             "--repo", str(minimal_repo), "--no-ai", "--json-output"],
+            capture_output=True, text=True, encoding="utf-8", timeout=120,
+        )
+        assert proc.returncode == 0, proc.stderr
+        snapshot = json.loads(proc.stdout)  # log lines on stdout would break this
+        assert snapshot["nodes"]
+        assert "Stage 2" in proc.stderr
+
+
+# ---------------------------------------------------------------------------
+# serve-mcp
+# ---------------------------------------------------------------------------
+
+class TestServeMcp:
+    def test_nonexistent_repo_exits_1(self, runner):
+        result = runner.invoke(main, ["serve-mcp", "--repo", "/no/such/path/xyz"])
+        assert result.exit_code == 1
+
+    def test_sse_passes_host_and_port_to_the_server_factory(self, runner, tmp_path):
+        mock_server = MagicMock()
+        with patch("archilens.mcp.server.create_mcp_server", return_value=mock_server) as factory:
+            result = runner.invoke(
+                main,
+                ["serve-mcp", "--repo", str(tmp_path), "--transport", "sse",
+                 "--host", "0.0.0.0", "--port", "9999"],
+            )
+        assert result.exit_code == 0
+        factory.assert_called_once_with(host="0.0.0.0", port=9999)
+        # FastMCP.run() accepts no host/port keyword arguments.
+        mock_server.run.assert_called_once_with(transport="sse")
+
+    def test_sse_binds_to_loopback_by_default(self, runner, tmp_path):
+        with patch("archilens.mcp.server.create_mcp_server", return_value=MagicMock()) as factory:
+            runner.invoke(main, ["serve-mcp", "--repo", str(tmp_path), "--transport", "sse"])
+        factory.assert_called_once_with(host="127.0.0.1", port=8766)
+
+    def test_stdio_transport(self, runner, tmp_path):
+        mock_server = MagicMock()
+        with patch("archilens.mcp.server.create_mcp_server", return_value=mock_server):
+            result = runner.invoke(main, ["serve-mcp", "--repo", str(tmp_path)])
+        assert result.exit_code == 0
+        mock_server.run.assert_called_once_with(transport="stdio")

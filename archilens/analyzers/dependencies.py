@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -124,7 +125,7 @@ def analyze_dependencies(
     files: list[SourceFile],
     modules: dict[str, Module],
     repo_path: str | Path,
-    progress_cb=None,
+    progress_cb: Callable[[str], None] | None = None,
 ) -> tuple[list[ArchNode], list[ArchEdge], nx.DiGraph]:
     """
     Analyze all source files and build the architecture graph.

@@ -17,17 +17,30 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from flask import Flask, Response
+
+    from archilens.config import ArchiLensConfig
+    from archilens.models import ArchSnapshot
 
 logger = logging.getLogger(__name__)
 
 # Capability colour palette (dark-theme friendly)
 _CAP_COLORS = [
-    "#1f6feb", "#2ea043", "#9e6a03", "#8957e5",
-    "#da3633", "#0075ca", "#bf8700", "#5a6e16",
+    "#1f6feb",
+    "#2ea043",
+    "#9e6a03",
+    "#8957e5",
+    "#da3633",
+    "#0075ca",
+    "#bf8700",
+    "#5a6e16",
 ]
 
 
-def create_app(repo_path: str | Path, use_ai: bool = False) -> "Flask":  # type: ignore[name-defined]  # noqa: F821
+def create_app(repo_path: str | Path, use_ai: bool = False) -> Flask:
     """
     Create and configure the Flask application.
 
@@ -36,7 +49,7 @@ def create_app(repo_path: str | Path, use_ai: bool = False) -> "Flask":  # type:
         use_ai:     Whether to enable AI-powered diagram enrichment.
     """
     try:
-        from flask import Flask, jsonify, render_template_string  # type: ignore[import]
+        from flask import Flask, jsonify, render_template_string
     except ImportError as exc:
         raise RuntimeError("Flask is required for the viewer. Install with: pip install archilens[viewer]") from exc
 
@@ -53,21 +66,20 @@ def create_app(repo_path: str | Path, use_ai: bool = False) -> "Flask":  # type:
     repo_path = Path(repo_path).resolve()
 
     # Cache the snapshot so we don't re-analyse on every request
-    _cache: dict[str, object] = {}
+    _cache: dict[str, tuple[ArchSnapshot, ArchiLensConfig]] = {}
 
-    def _get_snapshot():
-        if "snapshot" not in _cache:
+    def _get_snapshot() -> tuple[ArchSnapshot, ArchiLensConfig]:
+        if "analysis" not in _cache:
             config = load_config(repo_path)
-            _cache["config"] = config
-            _cache["snapshot"] = analyze_repository(repo_path, config, use_ai=use_ai)
-        return _cache["snapshot"], _cache["config"]
+            _cache["analysis"] = (analyze_repository(repo_path, config, use_ai=use_ai), config)
+        return _cache["analysis"]
 
     # ------------------------------------------------------------------
     # Routes
     # ------------------------------------------------------------------
 
     @app.route("/")
-    def index():
+    def index() -> str:
         snapshot, config = _get_snapshot()
         return render_template_string(
             _HTML_TEMPLATE,
@@ -76,7 +88,7 @@ def create_app(repo_path: str | Path, use_ai: bool = False) -> "Flask":  # type:
         )
 
     @app.route("/api/nav")
-    def nav():
+    def nav() -> Response:
         """Return the navigation tree as JSON."""
         snapshot, config = _get_snapshot()
         modules = snapshot.get_module_nodes()
@@ -113,21 +125,21 @@ def create_app(repo_path: str | Path, use_ai: bool = False) -> "Flask":  # type:
     # --- Mermaid diagram routes (backward-compatible, used by CLI output) ---
 
     @app.route("/api/diagram/l0")
-    def diagram_l0():
+    def diagram_l0() -> Response:
         snapshot, config = _get_snapshot()
         content = generate_system_context(snapshot, config)
         mermaid_code = _extract_mermaid(content)
         return jsonify({"mermaid": mermaid_code, "title": "L0: System Context", "level": 0})
 
     @app.route("/api/diagram/l1")
-    def diagram_l1():
+    def diagram_l1() -> Response:
         snapshot, _ = _get_snapshot()
         content = generate_module_architecture(snapshot)
         mermaid_code = _extract_mermaid(content)
         return jsonify({"mermaid": mermaid_code, "title": "L1: Module Architecture", "level": 1})
 
     @app.route("/api/diagram/l2/<path:module_id>")
-    def diagram_l2(module_id: str):
+    def diagram_l2(module_id: str) -> Response | tuple[Response, int]:
         snapshot, _ = _get_snapshot()
         node = next(
             (
@@ -148,7 +160,7 @@ def create_app(repo_path: str | Path, use_ai: bool = False) -> "Flask":  # type:
         return jsonify({"mermaid": mermaid_code, "title": f"L2: {node.name}", "level": 2})
 
     @app.route("/api/diagram/l3/<path:flow_id>")
-    def diagram_l3(flow_id: str):
+    def diagram_l3(flow_id: str) -> Response | tuple[Response, int]:
         snapshot, _ = _get_snapshot()
         flow = next(
             (
@@ -168,7 +180,7 @@ def create_app(repo_path: str | Path, use_ai: bool = False) -> "Flask":  # type:
     # --- Cytoscape graph route (used by viewer for L1 interactive graph) ---
 
     @app.route("/api/graph/l1")
-    def graph_l1():
+    def graph_l1() -> Response:
         """
         Return L1 module architecture as Cytoscape.js elements JSON.
 
@@ -186,19 +198,21 @@ def create_app(repo_path: str | Path, use_ai: bool = False) -> "Flask":  # type:
         for i, cap_name in enumerate(snapshot.capability_map):
             cap_id = f"cap__{cap_name.replace(' ', '_')}"
             cap_index[cap_name] = cap_id
-            cy_nodes.append({
-                "data": {
-                    "id": cap_id,
-                    "label": cap_name,
-                    "type": "capability",
-                    "color": _CAP_COLORS[i % len(_CAP_COLORS)],
-                },
-                "classes": "capability-group",
-            })
+            cy_nodes.append(
+                {
+                    "data": {
+                        "id": cap_id,
+                        "label": cap_name,
+                        "type": "capability",
+                        "color": _CAP_COLORS[i % len(_CAP_COLORS)],
+                    },
+                    "classes": "capability-group",
+                }
+            )
 
         # Module nodes
         for node in modules:
-            data: dict = {
+            data: dict[str, Any] = {
                 "id": node.id,
                 "label": node.name,
                 "loc": node.lines_of_code,
@@ -214,33 +228,37 @@ def create_app(repo_path: str | Path, use_ai: bool = False) -> "Flask":  # type:
         module_ids = {n.id for n in modules}
         for i, edge in enumerate(snapshot.edges):
             if edge.source in module_ids and edge.target in module_ids:
-                cy_edges.append({
-                    "data": {
-                        "id": f"e{i}",
-                        "source": edge.source,
-                        "target": edge.target,
-                        "weight": edge.weight,
-                        "label": str(edge.weight) if edge.weight > 1 else "",
+                cy_edges.append(
+                    {
+                        "data": {
+                            "id": f"e{i}",
+                            "source": edge.source,
+                            "target": edge.target,
+                            "weight": edge.weight,
+                            "label": str(edge.weight) if edge.weight > 1 else "",
+                        }
                     }
-                })
+                )
 
-        return jsonify({
-            "nodes": cy_nodes,
-            "edges": cy_edges,
-            "capabilities": list(snapshot.capability_map.keys()),
-            "module_count": len(modules),
-            "edge_count": len(cy_edges),
-        })
+        return jsonify(
+            {
+                "nodes": cy_nodes,
+                "edges": cy_edges,
+                "capabilities": list(snapshot.capability_map.keys()),
+                "module_count": len(modules),
+                "edge_count": len(cy_edges),
+            }
+        )
 
     # --- Utility routes ---
 
     @app.route("/api/snapshot")
-    def snapshot_json():
+    def snapshot_json() -> Response:
         snapshot, _ = _get_snapshot()
         return jsonify(json.loads(snapshot.model_dump_json()))
 
     @app.route("/api/modules")
-    def modules():
+    def modules() -> Response:
         snapshot, _ = _get_snapshot()
         return jsonify(
             [
@@ -256,14 +274,14 @@ def create_app(repo_path: str | Path, use_ai: bool = False) -> "Flask":  # type:
         )
 
     @app.route("/api/module-map")
-    def module_map():
+    def module_map() -> Response:
         """Return a mapping from Mermaid-sanitised node ID -> module_id."""
         snapshot, _ = _get_snapshot()
         mapping = {_sanitize_for_mermaid(n.id): n.id for n in snapshot.get_module_nodes()}
         return jsonify(mapping)
 
     @app.route("/api/refresh")
-    def refresh():
+    def refresh() -> Response:
         """Clear the analysis cache and re-analyse on next request."""
         _cache.clear()
         return jsonify({"status": "cache cleared"})

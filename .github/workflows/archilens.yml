@@ -1,5 +1,5 @@
 # .github/workflows/archilens.yml
-# 
+#
 # ArchiLens CI/CD Integration
 # Generates architecture diagrams on push and detects drift on PRs.
 
@@ -19,14 +19,14 @@ jobs:
   architecture:
     name: ArchiLens Analysis
     runs-on: ubuntu-latest
-    
+
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # Full history for diff analysis
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -51,40 +51,43 @@ jobs:
           git push
 
       # ── Drift detection on PRs ──
+      # Exits non-zero when a rule with action "fail" is violated; the report
+      # is still written, so the comment step below runs either way.
       - name: Architecture Drift Detection
         if: github.event_name == 'pull_request'
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           archilens diff \
             --repo . \
             --base origin/${{ github.base_ref }} \
             --head HEAD \
-            > /tmp/arch-diff.md
+            --output "$RUNNER_TEMP/arch-diff.md" > /dev/null
 
       - name: Comment PR with Architecture Changes
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request' && (success() || failure())
+        uses: actions/github-script@v9
         with:
           script: |
             const fs = require('fs');
-            let body;
-            try {
-              body = fs.readFileSync('/tmp/arch-diff.md', 'utf8');
-            } catch {
-              body = '## 🏗️ ArchiLens\n\nNo architecture changes detected.';
+            const path = require('path');
+            const report = path.join(process.env.RUNNER_TEMP, 'arch-diff.md');
+            if (!fs.existsSync(report)) {
+              core.info('No ArchiLens report was produced; skipping the PR comment.');
+              return;
             }
-            
-            const { data: comments } = await github.rest.issues.listComments({
+            const body = fs.readFileSync(report, 'utf8');
+
+            // Every report starts with this heading; it identifies our earlier
+            // comment so the PR gets one comment that is updated, not one per push.
+            const marker = '## ArchiLens: Architecture Diff';
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
             });
-            
-            const existing = comments.find(c => 
-              c.body.includes('ArchiLens')
-            );
-            
+
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+
             if (existing) {
               await github.rest.issues.updateComment({
                 owner: context.repo.owner,

@@ -22,6 +22,10 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from archilens.config import ArchiLensConfig
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +70,7 @@ class EvolutionTimeline:
 
 def analyze_evolution(
     repo_path: Path,
-    config,  # ArchiLensConfig
+    config: ArchiLensConfig,
     refs: list[str] | None = None,
     use_tags: bool = False,
     max_refs: int = 10,
@@ -87,7 +91,7 @@ def analyze_evolution(
         EvolutionTimeline with per-ref snapshots and diff info.
     """
     try:
-        import git  # type: ignore[import]
+        import git
     except ImportError as exc:
         raise RuntimeError("gitpython is required for evolution analysis. Install with: pip install gitpython") from exc
 
@@ -255,7 +259,7 @@ def generate_evolution_report(timeline: EvolutionTimeline) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _analyse_ref(repo, repo_path: Path, ref: str, config) -> RefSnapshot | None:
+def _analyse_ref(repo: Any, repo_path: Path, ref: str, config: ArchiLensConfig) -> RefSnapshot | None:
     """
     Analyse the architecture at *ref* by reading blobs from the git object db.
 
@@ -326,7 +330,7 @@ def _analyse_ref(repo, repo_path: Path, ref: str, config) -> RefSnapshot | None:
     )
 
 
-def _discover_semver_tags(repo) -> list[str]:
+def _discover_semver_tags(repo: Any) -> list[str]:
     """Return all semver tags sorted oldest→newest."""
     _semver = re.compile(r"^v?\d+\.\d+")
     tags = [t.name for t in repo.tags if _semver.match(t.name)]
@@ -342,7 +346,7 @@ def _try_int(s: str) -> int:
         return 0
 
 
-def _get_lang_extensions(config) -> set[str]:
+def _get_lang_extensions(config: ArchiLensConfig) -> set[str]:
     from archilens.analyzers.discovery import EXTENSION_MAP
 
     if config.analysis.languages:

@@ -13,6 +13,7 @@ import tempfile
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ def checkout_ref(
         RuntimeError: If gitpython is not installed or the ref cannot be resolved.
     """
     try:
-        import git  # type: ignore[import]
+        import git
     except ImportError as exc:
         raise RuntimeError("gitpython is required for multi-ref diff. Install with: pip install gitpython") from exc
 
@@ -62,7 +63,7 @@ def checkout_ref(
 def resolve_ref(repo_path: Path, ref: str) -> str | None:
     """Return the full commit SHA for *ref*, or None if it cannot be resolved."""
     try:
-        import git  # type: ignore[import]
+        import git
 
         repo = git.Repo(repo_path, search_parent_directories=True)
         return repo.commit(ref).hexsha
@@ -73,7 +74,7 @@ def resolve_ref(repo_path: Path, ref: str) -> str | None:
 def get_tags(repo_path: Path) -> list[str]:
     """Return all tag names sorted oldest-to-newest by commit date."""
     try:
-        import git  # type: ignore[import]
+        import git
 
         repo = git.Repo(repo_path, search_parent_directories=True)
         tags = sorted(
@@ -90,7 +91,7 @@ def get_tags(repo_path: Path) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def _extract_tree(tree, dest: Path) -> None:
+def _extract_tree(tree: Any, dest: Path) -> None:
     """Recursively write all blobs in *tree* under *dest*."""
     for item in tree:
         item_path = dest / item.path

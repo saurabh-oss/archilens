@@ -13,13 +13,21 @@ from __future__ import annotations
 import logging
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import click
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.table import Table
 
+if TYPE_CHECKING:
+    from archilens.models import ArchSnapshot
+
 console = Console(highlight=False)
+
+# Logs and progress go to stderr so stdout stays clean when it is redirected
+# (`archilens diff ... > diff.md`, `archilens analyze --json-output > snapshot.json`).
+err_console = Console(stderr=True, highlight=False)
 
 # Use only ASCII-safe symbols so Windows cp1252 consoles don't choke.
 _OK = "[green]OK[/]"
@@ -31,7 +39,7 @@ def _setup_logging(verbose: bool) -> None:
     logging.basicConfig(
         level=level,
         format="%(message)s",
-        handlers=[RichHandler(console=console, rich_tracebacks=True)],
+        handlers=[RichHandler(console=err_console, rich_tracebacks=True)],
     )
 
 
@@ -89,7 +97,7 @@ def analyze(
         for lc in config.diagrams.levels:
             lc["enabled"] = lc["level"] == level
 
-    with console.status("[bold blue]Analyzing repository..."):
+    with err_console.status("[bold blue]Analyzing repository..."):
         snapshot = analyze_repository(repo_path, config, use_ai=not no_ai)
 
     if json_output:
@@ -127,46 +135,48 @@ def diff(repo: str, base: str, head: str, output: str | None, verbose: bool) -> 
     from archilens.config import ConfigError, load_config
     from archilens.engine import analyze_repository
 
+    # stdout carries only the markdown report (it gets redirected into PR
+    # comments), so every status and error message in this command uses stderr.
     repo_path = Path(repo).resolve()
     if not repo_path.exists():
-        console.print(f"[red]Repository path does not exist:[/] {repo_path}")
+        err_console.print(f"[red]Repository path does not exist:[/] {repo_path}")
         sys.exit(1)
 
     try:
         config = load_config(repo_path)
     except ConfigError as exc:
-        console.print(f"[red]Config error:[/] {exc}")
+        err_console.print(f"[red]Config error:[/] {exc}")
         sys.exit(1)
 
     # Resolve SHAs so the user sees exactly what is being compared
     base_sha = resolve_ref(repo_path, base) or base
     head_sha = resolve_ref(repo_path, head) or head
-    console.print(f"Comparing [bold]{base}[/] ({base_sha[:8]}) -> [bold]{head}[/] ({head_sha[:8]})")
+    err_console.print(f"Comparing [bold]{base}[/] ({base_sha[:8]}) -> [bold]{head}[/] ({head_sha[:8]})")
 
     try:
-        with console.status(f"[bold blue]Extracting {base}..."), checkout_ref(repo_path, base) as base_dir:
+        with err_console.status(f"[bold blue]Extracting {base}..."), checkout_ref(repo_path, base) as base_dir:
             base_snapshot = analyze_repository(base_dir, config, use_ai=False, git_ref=base)
 
-        with console.status(f"[bold blue]Extracting {head}..."), checkout_ref(repo_path, head) as head_dir:
+        with err_console.status(f"[bold blue]Extracting {head}..."), checkout_ref(repo_path, head) as head_dir:
             head_snapshot = analyze_repository(head_dir, config, use_ai=False, git_ref=head)
 
     except RuntimeError as exc:
-        console.print(f"[red]Error:[/] {exc}")
+        err_console.print(f"[red]Error:[/] {exc}")
         sys.exit(1)
 
     arch_diff = compute_diff(base_snapshot, head_snapshot)
     violations = check_rules(arch_diff, head_snapshot, config.ci.rules)
     md_output = format_diff_as_markdown(arch_diff)
 
-    console.print()
-    console.print(md_output)
+    # Plain echo: Rich would hard-wrap table rows at the terminal width.
+    click.echo(md_output)
 
     if output:
         Path(output).write_text(md_output, encoding="utf-8")
-        console.print(f"\n{_OK} Diff written to [bold]{output}[/]")
+        err_console.print(f"\n{_OK} Diff written to [bold]{output}[/]")
 
     if violations:
-        console.print(f"\n[yellow]WARN: {len(violations)} rule violation(s) found[/]")
+        err_console.print(f"\n[yellow]WARN: {len(violations)} rule violation(s) found[/]")
         if any(v.startswith("[FAIL]") for v in violations):
             sys.exit(1)
 
@@ -323,16 +333,18 @@ def history(repo: str, refs: str | None, use_tags: bool, max_refs: int, output: 
 @main.command("serve-mcp")
 @click.option("--repo", "-r", default=".", help="Path to the Git repository")
 @click.option(
-    "--transport", "-t",
+    "--transport",
+    "-t",
     default="stdio",
     type=click.Choice(["stdio", "sse"]),
     show_default=True,
     help="MCP transport: stdio (Claude Code / Cursor) or sse (HTTP endpoint)",
 )
+@click.option("--host", default="127.0.0.1", show_default=True, help="Interface for SSE transport")
 @click.option("--port", "-p", default=8766, show_default=True, help="Port for SSE transport")
 @click.option("--refresh", is_flag=True, help="Force re-analysis, ignore snapshot cache")
 @click.option("--verbose", "-v", is_flag=True)
-def serve_mcp(repo: str, transport: str, port: int, refresh: bool, verbose: bool) -> None:
+def serve_mcp(repo: str, transport: str, host: str, port: int, refresh: bool, verbose: bool) -> None:
     """Launch the ArchiLens MCP server for AI coding agents (Claude Code, Cursor, etc.)."""
     _setup_logging(verbose)
 
@@ -353,6 +365,7 @@ def serve_mcp(repo: str, transport: str, port: int, refresh: bool, verbose: bool
 
     if refresh:
         from archilens.mcp.cache import invalidate_cache
+
         invalidate_cache(repo_path)
         click.echo(f"Cache invalidated for {repo_path.name}", err=True)
 
@@ -361,10 +374,10 @@ def serve_mcp(repo: str, transport: str, port: int, refresh: bool, verbose: bool
     if transport == "sse":
         console.print("[bold blue]ArchiLens MCP Server[/] (SSE transport)")
         console.print(f"  Repository : [cyan]{repo_path}[/]")
-        console.print(f"  Endpoint   : [bold]http://localhost:{port}/sse[/]")
+        console.print(f"  Endpoint   : [bold]http://{host}:{port}/sse[/]")
         console.print()
         console.print("Add to your MCP client config:")
-        console.print(f'  {{"url": "http://localhost:{port}/sse"}}')
+        console.print(f'  {{"url": "http://{host}:{port}/sse"}}')
         console.print()
     else:
         # stdio: print setup instructions to stderr only — stdout is the MCP wire protocol
@@ -375,14 +388,15 @@ def serve_mcp(repo: str, transport: str, port: int, refresh: bool, verbose: bool
             '    "archilens": {\n'
             '      "command": "archilens",\n'
             f'      "args": ["serve-mcp", "--repo", "{repo_path}"]\n'
-            '    }\n'
+            "    }\n"
             "  }",
             err=True,
         )
 
-    mcp_server = create_mcp_server()
+    # FastMCP takes host/port at construction time, not in run().
+    mcp_server = create_mcp_server(host=host, port=port)
     if transport == "sse":
-        mcp_server.run(transport="sse", host="0.0.0.0", port=port)
+        mcp_server.run(transport="sse")
     else:
         mcp_server.run(transport="stdio")
 
@@ -429,7 +443,7 @@ def serve(repo: str, port: int, use_ai: bool, debug: bool) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _print_summary(snapshot) -> None:
+def _print_summary(snapshot: ArchSnapshot) -> None:
     """Print a rich summary of the analysis results."""
     console.print()
     console.print(f"[bold blue]ArchiLens Analysis[/]: {snapshot.project_name}")

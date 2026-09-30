@@ -15,10 +15,11 @@ import json
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from archilens.config import AIConfig
 from archilens.models import (
+    ArchNode,
     ArchPattern,
     ArchSnapshot,
     FlowStep,
@@ -90,9 +91,18 @@ _PATTERN_TOOL: dict[str, Any] = {
                 "items": {
                     "type": "string",
                     "enum": [
-                        "mvc", "hexagonal", "layered", "microservices",
-                        "event_driven", "cqrs", "repository", "factory",
-                        "observer", "middleware_chain", "saga", "clean_architecture",
+                        "mvc",
+                        "hexagonal",
+                        "layered",
+                        "microservices",
+                        "event_driven",
+                        "cqrs",
+                        "repository",
+                        "factory",
+                        "observer",
+                        "middleware_chain",
+                        "saga",
+                        "clean_architecture",
                     ],
                 },
                 "description": "List of detected pattern names",
@@ -203,14 +213,14 @@ class AIClient:
                 max_tokens=max_tokens,
                 messages=[{"role": "user", "content": prompt}],
             )
-            return response.content[0].text
+            return cast(str, response.content[0].text)
         else:
             response = client.completion(
                 model=self.config.model,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=max_tokens,
             )
-            return response.choices[0].message.content
+            return cast(str, response.choices[0].message.content)
 
     def complete_with_tool(
         self,
@@ -234,17 +244,19 @@ class AIClient:
                 response = client.messages.create(
                     model=self.config.model,
                     max_tokens=max_tokens,
-                    tools=[{
-                        "name": tool["name"],
-                        "description": tool.get("description", ""),
-                        "input_schema": tool["input_schema"],
-                    }],
+                    tools=[
+                        {
+                            "name": tool["name"],
+                            "description": tool.get("description", ""),
+                            "input_schema": tool["input_schema"],
+                        }
+                    ],
                     tool_choice={"type": "tool", "name": tool["name"]},
                     messages=[{"role": "user", "content": prompt}],
                 )
                 for block in response.content:
                     if hasattr(block, "input"):
-                        return block.input  # type: ignore[return-value]
+                        return cast("dict[str, Any]", block.input)
             except Exception as exc:
                 logger.warning("Tool use failed, falling back to text: %s", exc)
 
@@ -342,7 +354,7 @@ def generate_module_summaries(
     summaries: dict[str, dict[str, str]] = {}
     module_nodes = snapshot.get_module_nodes()
 
-    def _summarize_one(node) -> tuple[str, dict[str, str] | None]:
+    def _summarize_one(node: ArchNode) -> tuple[str, dict[str, str] | None]:
         children = snapshot.get_children(node.id)
         symbols = ", ".join(c.name for c in children[:20])
         deps = [e.target.replace("module:", "") for e in snapshot.edges if e.source == node.id]
@@ -427,13 +439,13 @@ def _parse_json_response(text: str) -> dict[str, Any] | None:
         text = text.strip()
 
     try:
-        return json.loads(text)
+        return cast("dict[str, Any]", json.loads(text))
     except json.JSONDecodeError:
         start = text.find("{")
         end = text.rfind("}") + 1
         if start >= 0 and end > start:
             try:
-                return json.loads(text[start:end])
+                return cast("dict[str, Any]", json.loads(text[start:end]))
             except json.JSONDecodeError:
                 pass
 

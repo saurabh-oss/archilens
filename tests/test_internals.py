@@ -252,6 +252,24 @@ class TestDiffCompute:
         violations = check_rules(diff, head, config.ci.rules)
         assert any("no-layer-skip" in v for v in violations)
 
+    def test_check_rules_no_layer_skip_documented_glob(self):
+        """The README's `src/presentation/**` style must match 2-level module paths."""
+        from archilens.analyzers.diff import check_rules, compute_diff
+        rule = CIRule(
+            name="no-layer-skip", action="fail",
+            from_pattern="src/presentation/**", to_pattern="src/infrastructure/**",
+        )
+        edge = ArchEdge(source="module:src/presentation", target="module:src/infrastructure",
+                        edge_type=EdgeType.DEPENDENCY)
+        allowed = ArchEdge(source="module:src/presentation", target="module:src/domain",
+                           edge_type=EdgeType.DEPENDENCY)
+        head = self._snap(edges=[edge, allowed])
+        diff = compute_diff(self._snap(), head)
+        violations = check_rules(diff, head, [rule])
+        assert len(violations) == 1
+        assert violations[0].startswith("[FAIL]")
+        assert "src/infrastructure" in violations[0]
+
     def test_check_rules_max_fan_out(self):
         from archilens.analyzers.diff import check_rules, compute_diff
         rule = CIRule(name="max-fan-out", action="warn", threshold=2)
@@ -475,6 +493,24 @@ class TestEngineHelpers:
         assert payments_node.capability == "Payments"
         assert "Payments" in two_module_snap.capability_map
 
+    def test_apply_capability_mappings_documented_glob(self):
+        """The README's `src/orders/**` style must match the module `src/orders`."""
+        from archilens.engine import _apply_capability_mappings
+
+        orders = _module_node("module:src/orders", "Orders")
+        orders.file_path = "src/orders"
+        payments = _module_node("module:src/payments", "Payments")
+        payments.file_path = "src/payments"
+        snap = ArchSnapshot(project_name="Shop", nodes=[orders, payments])
+
+        config = ArchiLensConfig()
+        config.capabilities = [Capability(name="Order Management", modules=["src/orders/**"])]
+        _apply_capability_mappings(snap, config)
+
+        assert orders.capability == "Order Management"
+        assert payments.capability is None
+        assert snap.capability_map == {"Order Management": ["module:src/orders"]}
+
     def test_apply_capability_mappings_no_match(self, two_module_snap):
         from archilens.engine import _apply_capability_mappings
 
@@ -507,3 +543,28 @@ class TestEngineHelpers:
         assert "a" in tree
         assert "b" in tree
         assert "file.py" not in tree  # too deep for max_depth=2
+
+
+# ===========================================================================
+# utils
+# ===========================================================================
+
+class TestModuleMatches:
+    @pytest.mark.parametrize(
+        ("module_path", "pattern", "expected"),
+        [
+            ("src/orders", "src/orders/**", True),    # dir/** includes the dir itself
+            ("src/orders", "src/orders", True),
+            ("src/orders", "src/*", True),
+            ("src/orders", "**/orders", True),
+            ("src\\orders", "src/orders/**", True),   # Windows separators
+            ("src/orders", "src/payments/**", False),
+            ("src/orders_v2", "src/orders/**", False),
+            ("src/orders", "src/orders/*", False),    # /* means children only
+            ("src/Orders", "src/orders/**", False),   # case-sensitive on every OS
+        ],
+    )
+    def test_module_matches(self, module_path, pattern, expected):
+        from archilens.utils import module_matches
+
+        assert module_matches(module_path, pattern) is expected

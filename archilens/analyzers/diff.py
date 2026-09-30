@@ -10,6 +10,11 @@ from __future__ import annotations
 
 from archilens.config import CIRule
 from archilens.models import ArchDiff, ArchSnapshot, DiffEntry
+from archilens.utils import module_matches
+
+# Flag a node / edge as "modified" when its LOC / import count changes by this fraction.
+_LOC_CHANGE_THRESHOLD = 0.2
+_WEIGHT_CHANGE_THRESHOLD = 0.2
 
 
 def compute_diff(base: ArchSnapshot, head: ArchSnapshot) -> ArchDiff:
@@ -53,8 +58,6 @@ def compute_diff(base: ArchSnapshot, head: ArchSnapshot) -> ArchDiff:
         )
 
     # --- Modified nodes (same node, LOC changed by >20%) ---
-    _LOC_CHANGE_THRESHOLD = 0.2
-
     for node_id in base_node_ids & head_node_ids:
         base_node = next(n for n in base.nodes if n.id == node_id)
         head_node = next(n for n in head.nodes if n.id == node_id)
@@ -103,8 +106,6 @@ def compute_diff(base: ArchSnapshot, head: ArchSnapshot) -> ArchDiff:
     # --- Modified edges (same key, changed weight — coupling increased/decreased) ---
     base_edge_weights = {(e.source, e.target, e.edge_type): e.weight for e in base.edges}
     head_edge_weights = {(e.source, e.target, e.edge_type): e.weight for e in head.edges}
-
-    _WEIGHT_CHANGE_THRESHOLD = 0.2  # flag if weight changes by >20%
 
     for key in base_edge_keys & head_edge_keys:
         bw = base_edge_weights[key]
@@ -169,11 +170,7 @@ def check_rules(
                 src_path = edge.source.replace("module:", "")
                 tgt_path = edge.target.replace("module:", "")
 
-                import fnmatch
-
-                if fnmatch.fnmatch(src_path, rule.from_pattern.replace("**", "*")) and fnmatch.fnmatch(
-                    tgt_path, rule.to_pattern.replace("**", "*")
-                ):
+                if module_matches(src_path, rule.from_pattern) and module_matches(tgt_path, rule.to_pattern):
                     msg = (
                         f"[{rule.action.upper()}] Rule '{rule.name}': "
                         f"Forbidden dependency from {src_path} to {tgt_path}"

@@ -28,7 +28,7 @@ source .venv/bin/activate      # Linux / macOS
 # .venv\Scripts\activate       # Windows
 
 # Install in editable mode with all extras
-pip install -e ".[dev,viewer]"
+pip install -e ".[dev,viewer,mcp]"
 ```
 
 ---
@@ -127,8 +127,8 @@ ruff format --check archilens/
 # Auto-fix formatting
 ruff format archilens/
 
-# Type checking (advisory — strict mode, warnings expected on some modules)
-mypy archilens/ --ignore-missing-imports
+# Type checking (must pass — strict mode, configured in pyproject.toml)
+mypy archilens/
 ```
 
 - Line length: 100

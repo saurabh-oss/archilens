@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "archilens"
-version = "0.2.0"
+dynamic = ["version"]  # single source: archilens/__init__.py
 description = "AI-powered layered architecture & process flow visualization for Git repositories"
 readme = "README.md"
 license = { text = "MIT" }
@@ -59,7 +59,8 @@ viewer = [
     "flask>=3.0",
 ]
 mcp = [
-    "mcp>=1.0.0",
+    # mcp 2.x removed mcp.server.fastmcp (renamed to MCPServer); stay on 1.x until the server is ported.
+    "mcp>=1.0.0,<2",
 ]
 
 [project.scripts]
@@ -70,6 +71,9 @@ Homepage = "https://saurabh-oss.github.io/archilens/"
 Repository = "https://github.com/saurabh-oss/archilens"
 Issues = "https://github.com/saurabh-oss/archilens/issues"
 Changelog = "https://github.com/saurabh-oss/archilens/releases"
+
+[tool.hatch.version]
+path = "archilens/__init__.py"
 
 [tool.ruff]
 target-version = "py310"
@@ -89,3 +93,4 @@ asyncio_mode = "auto"
 [tool.mypy]
 python_version = "3.10"
 strict = true
+ignore_missing_imports = true

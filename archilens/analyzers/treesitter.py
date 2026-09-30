@@ -34,37 +34,37 @@ def _get_lang_parser(language: str) -> tuple[Any, Any] | None:
         return _LANGUAGES[language], _PARSERS[language]
 
     try:
-        from tree_sitter import Language, Parser  # type: ignore[import]
+        from tree_sitter import Language, Parser
 
         lang_obj: Any
 
         if language == "python":
-            import tree_sitter_python as _m  # type: ignore[import]
+            import tree_sitter_python as _py
 
-            lang_obj = Language(_m.language())
+            lang_obj = Language(_py.language())
 
         elif language == "javascript":
-            import tree_sitter_javascript as _m  # type: ignore[import]
+            import tree_sitter_javascript as _js
 
-            lang_obj = Language(_m.language())
+            lang_obj = Language(_js.language())
 
         elif language == "typescript":
-            import tree_sitter_typescript as _m  # type: ignore[import]
+            import tree_sitter_typescript as _ts
 
-            fn = getattr(_m, "language_typescript", None) or getattr(_m, "language", None)
+            fn = getattr(_ts, "language_typescript", None) or getattr(_ts, "language", None)
             if fn is None:
                 return None
             lang_obj = Language(fn())
 
         elif language == "java":
-            import tree_sitter_java as _m  # type: ignore[import]
+            import tree_sitter_java as _java
 
-            lang_obj = Language(_m.language())
+            lang_obj = Language(_java.language())
 
         elif language == "go":
-            import tree_sitter_go as _m  # type: ignore[import]
+            import tree_sitter_go as _go
 
-            lang_obj = Language(_m.language())
+            lang_obj = Language(_go.language())
 
         else:
             return None
@@ -313,7 +313,7 @@ def _query_captures(lang_obj: Any, query_str: str, node: Any) -> dict[str, list[
     Falls back to the deprecated ``Language.query().captures()`` for older builds.
     """
     try:
-        from tree_sitter import Query, QueryCursor  # type: ignore[import]
+        from tree_sitter import Query, QueryCursor
 
         q = Query(lang_obj, query_str)
         cursor = QueryCursor(q)
@@ -351,7 +351,7 @@ def _query_matches(
     Execute a query and return matches as a list of (pattern_idx, capture_dict).
     """
     try:
-        from tree_sitter import Query, QueryCursor  # type: ignore[import]
+        from tree_sitter import Query, QueryCursor
 
         q = Query(lang_obj, query_str)
         cursor = QueryCursor(q)

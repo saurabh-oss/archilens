@@ -24,15 +24,25 @@ Add to Claude Code settings:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+from archilens.utils import module_matches
+
+if TYPE_CHECKING:
+    from mcp.server.fastmcp import FastMCP
+
+    from archilens.config import ArchiLensConfig
+    from archilens.models import ArchNode, ArchSnapshot
 
 logger = logging.getLogger(__name__)
 
 # Module-level state populated by init_server() before the server starts.
 _repo_path: Path | None = None
-_snapshot = None   # ArchSnapshot | None
-_config = None     # ArchiLensConfig | None
+_snapshot: ArchSnapshot | None = None
+_config: ArchiLensConfig | None = None
 
 
 def init_server(repo_path: Path) -> None:
@@ -44,25 +54,25 @@ def init_server(repo_path: Path) -> None:
 def _current_head(repo_path: Path) -> str:
     """Return the short HEAD SHA, or 'HEAD' if git is unavailable."""
     try:
-        import git  # type: ignore[import]
+        import git
+
         repo = git.Repo(repo_path, search_parent_directories=True)
         return repo.head.commit.hexsha[:12]
     except Exception:
         return "HEAD"
 
 
-def _ensure_loaded() -> None:
+def _ensure_loaded() -> ArchSnapshot:
     """
-    Lazily load (or restore from cache) the ArchSnapshot.
+    Lazily load (or restore from cache) the ArchSnapshot and return it.
     Called at the start of every tool invocation.
     """
     global _snapshot, _config
     if _snapshot is not None:
-        return
+        return _snapshot
     if _repo_path is None:
         raise RuntimeError(
-            "ArchiLens MCP server not initialised — repo_path is not set. "
-            "Use 'archilens serve-mcp --repo PATH'."
+            "ArchiLens MCP server not initialised — repo_path is not set. Use 'archilens serve-mcp --repo PATH'."
         )
 
     from archilens.config import load_config
@@ -75,7 +85,7 @@ def _ensure_loaded() -> None:
     if cached is not None:
         logger.info("Restored snapshot from cache (%s @ %s)", _repo_path.name, git_ref)
         _snapshot = cached
-        return
+        return _snapshot
 
     logger.info("No cache hit — running analysis on %s ...", _repo_path)
     from archilens.engine import analyze_repository
@@ -83,9 +93,10 @@ def _ensure_loaded() -> None:
     _snapshot = analyze_repository(_repo_path, _config, use_ai=False, git_ref=git_ref)
     save_snapshot(_repo_path, git_ref, _snapshot)
     logger.info("Analysis complete — snapshot cached.")
+    return _snapshot
 
 
-def _module_for_path(file_path: str):  # -> ArchNode | None
+def _module_for_path(snap: ArchSnapshot, file_path: str) -> ArchNode | None:
     """
     Find the module node that owns *file_path*.
 
@@ -93,15 +104,13 @@ def _module_for_path(file_path: str):  # -> ArchNode | None
     match against module IDs (which are stored as the module path without the
     'module:' prefix).
     """
-    snap = _snapshot
     norm = file_path.replace("\\", "/")
 
     # If an absolute path was passed, try to make it relative to the repo root
+    # (ValueError: already relative or not under repo root)
     if _repo_path is not None:
-        try:
+        with contextlib.suppress(ValueError):
             norm = str(Path(file_path).resolve().relative_to(_repo_path)).replace("\\", "/")
-        except ValueError:
-            pass  # already relative or not under repo root
 
     parts = [p for p in norm.split("/") if p and p != "."]
 
@@ -110,10 +119,12 @@ def _module_for_path(file_path: str):  # -> ArchNode | None
         parts[0] if parts else "",  # depth-1: "src"
     ]
 
-    for node in snap.get_module_nodes():
-        mod_path = node.id.replace("module:", "")
-        if mod_path in candidates:
-            return node
+    # Most specific candidate wins: a file in "pkg/sub/" belongs to "pkg/sub",
+    # not to "pkg", even when "pkg" is also a module.
+    modules = {node.id.replace("module:", ""): node for node in snap.get_module_nodes()}
+    for candidate in candidates:
+        if candidate in modules:
+            return modules[candidate]
 
     return None
 
@@ -123,14 +134,18 @@ def _module_for_path(file_path: str):  # -> ArchNode | None
 # ---------------------------------------------------------------------------
 
 
-def create_mcp_server():  # -> FastMCP
+def create_mcp_server(host: str = "127.0.0.1", port: int = 8766) -> FastMCP:
     """
     Build and return a configured FastMCP server instance.
 
     The server is stateless at creation time; all tool handlers call
     _ensure_loaded() to lazily populate the snapshot on first use.
+
+    Args:
+        host: Interface the SSE transport binds to (ignored for stdio).
+        port: Port the SSE transport listens on (ignored for stdio).
     """
-    from mcp.server.fastmcp import FastMCP  # type: ignore[import]
+    from mcp.server.fastmcp import FastMCP
 
     mcp = FastMCP(
         "ArchiLens",
@@ -140,6 +155,8 @@ def create_mcp_server():  # -> FastMCP
             "Call get_module_context(file_path) before editing any file. "
             "Call check_dependency_allowed(source, target) before adding any import."
         ),
+        host=host,
+        port=port,
     )
 
     # ------------------------------------------------------------------
@@ -147,7 +164,7 @@ def create_mcp_server():  # -> FastMCP
     # ------------------------------------------------------------------
 
     @mcp.tool()
-    def get_module_context(file_path: str) -> dict:
+    def get_module_context(file_path: str) -> dict[str, Any]:
         """
         Return the module owning this file, its business capability, AI summary,
         lines of code, and top direct dependencies / reverse dependencies.
@@ -158,10 +175,9 @@ def create_mcp_server():  # -> FastMCP
             file_path: Relative path from repo root (e.g. "src/orders/service.py")
                        or an absolute filesystem path.
         """
-        _ensure_loaded()
-        snap = _snapshot
+        snap = _ensure_loaded()
 
-        node = _module_for_path(file_path)
+        node = _module_for_path(snap, file_path)
         if node is None:
             known = [n.name for n in snap.get_module_nodes()]
             return {
@@ -170,17 +186,9 @@ def create_mcp_server():  # -> FastMCP
                 "tip": "Pass a path relative to the repo root, e.g. 'agents/crew.py'.",
             }
 
-        deps = [
-            e.target.replace("module:", "")
-            for e in snap.edges
-            if e.source == node.id
-        ][:5]
+        deps = [e.target.replace("module:", "") for e in snap.edges if e.source == node.id][:5]
 
-        rdeps = [
-            e.source.replace("module:", "")
-            for e in snap.edges
-            if e.target == node.id
-        ][:5]
+        rdeps = [e.source.replace("module:", "") for e in snap.edges if e.target == node.id][:5]
 
         return {
             "module": node.name,
@@ -198,7 +206,7 @@ def create_mcp_server():  # -> FastMCP
     # ------------------------------------------------------------------
 
     @mcp.tool()
-    def check_dependency_allowed(source_file: str, target_module: str) -> dict:
+    def check_dependency_allowed(source_file: str, target_module: str) -> dict[str, Any]:
         """
         Check whether an import from source_file to target_module is permitted
         by the CI rules defined in .archilens.yml.
@@ -212,17 +220,14 @@ def create_mcp_server():  # -> FastMCP
             target_module: Module name or path being imported (e.g. "infrastructure/db").
         """
         _ensure_loaded()
-        import fnmatch
 
         # Derive source module from file path
         norm = source_file.replace("\\", "/")
         if _repo_path is not None:
-            try:
+            with contextlib.suppress(ValueError):
                 norm = str(Path(source_file).resolve().relative_to(_repo_path)).replace("\\", "/")
-            except ValueError:
-                pass
         parts = [p for p in norm.split("/") if p and p != "."]
-        source_module = "/".join(parts[:min(2, len(parts))]) if parts else source_file
+        source_module = "/".join(parts[: min(2, len(parts))]) if parts else source_file
 
         if _config is None or not _config.ci.rules:
             return {
@@ -233,20 +238,23 @@ def create_mcp_server():  # -> FastMCP
             }
 
         for rule in _config.ci.rules:
-            if rule.name == "no-layer-skip" and rule.from_pattern and rule.to_pattern:
-                fp = rule.from_pattern.replace("**", "*")
-                tp = rule.to_pattern.replace("**", "*")
-                if fnmatch.fnmatch(source_module, fp) and fnmatch.fnmatch(target_module, tp):
-                    blocked = rule.action == "fail"
-                    return {
-                        "allowed": not blocked,
-                        "reason": (
-                            f"Rule '{rule.name}' {'forbids' if blocked else 'warns about'} "
-                            f"dependency from '{source_module}' to '{target_module}'."
-                        ),
-                        "rule": rule.name,
-                        "action": rule.action,
-                    }
+            if (
+                rule.name == "no-layer-skip"
+                and rule.from_pattern
+                and rule.to_pattern
+                and module_matches(source_module, rule.from_pattern)
+                and module_matches(target_module, rule.to_pattern)
+            ):
+                blocked = rule.action == "fail"
+                return {
+                    "allowed": not blocked,
+                    "reason": (
+                        f"Rule '{rule.name}' {'forbids' if blocked else 'warns about'} "
+                        f"dependency from '{source_module}' to '{target_module}'."
+                    ),
+                    "rule": rule.name,
+                    "action": rule.action,
+                }
 
         return {
             "allowed": True,
@@ -260,7 +268,7 @@ def create_mcp_server():  # -> FastMCP
     # ------------------------------------------------------------------
 
     @mcp.tool()
-    def find_capability_owner(feature_description: str) -> dict:
+    def find_capability_owner(feature_description: str) -> dict[str, Any]:
         """
         Find which module and business capability best matches a feature description.
 
@@ -272,8 +280,7 @@ def create_mcp_server():  # -> FastMCP
                                   concept (e.g. "user authentication and sessions",
                                   "payment processing and invoicing").
         """
-        _ensure_loaded()
-        snap = _snapshot
+        snap = _ensure_loaded()
 
         query_words = set(feature_description.lower().split())
         scored: list[tuple[float, str, str, str]] = []
@@ -313,8 +320,7 @@ def create_mcp_server():  # -> FastMCP
                 "confidence": confidence,
             },
             "alternatives": [
-                {"module": name, "capability": cap, "score": round(s, 1)}
-                for s, _, name, cap in scored[1:4]
+                {"module": name, "capability": cap, "score": round(s, 1)} for s, _, name, cap in scored[1:4]
             ],
         }
 
@@ -335,8 +341,7 @@ def create_mcp_server():  # -> FastMCP
                 "L2:<module>" — Class-level detail for a module (e.g. "L2:agents")
                 "capabilities"— Business capability groupings only
         """
-        _ensure_loaded()
-        snap = _snapshot
+        snap = _ensure_loaded()
         lines: list[str] = []
 
         if scope == "L0":
@@ -358,9 +363,9 @@ def create_mcp_server():  # -> FastMCP
             target = scope[3:].strip().lower()
             module_node = next(
                 (
-                    n for n in snap.get_module_nodes()
-                    if n.name.lower() == target
-                    or target in n.id.lower().replace("module:", "")
+                    n
+                    for n in snap.get_module_nodes()
+                    if n.name.lower() == target or target in n.id.lower().replace("module:", "")
                 ),
                 None,
             )
@@ -416,9 +421,7 @@ def create_mcp_server():  # -> FastMCP
             for node in sorted(modules, key=lambda n: n.lines_of_code, reverse=True)[:25]:
                 dep_count = sum(1 for e in snap.edges if e.source == node.id)
                 cap = f" [{node.capability}]" if node.capability else ""
-                lines.append(
-                    f"  {node.name}{cap} — {node.lines_of_code:,} LOC, {dep_count} outgoing deps"
-                )
+                lines.append(f"  {node.name}{cap} — {node.lines_of_code:,} LOC, {dep_count} outgoing deps")
 
             top_edges = sorted(snap.edges, key=lambda e: e.weight, reverse=True)[:12]
             if top_edges:

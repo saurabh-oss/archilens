@@ -10,13 +10,18 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from archilens.ai import AIClient, detect_patterns, generate_module_summaries, infer_process_flows
 from archilens.analyzers.dependencies import analyze_dependencies, compute_metrics
-from archilens.analyzers.discovery import discover_files
+from archilens.analyzers.discovery import Module, SourceFile, discover_files
 from archilens.config import ArchiLensConfig, load_config
 from archilens.generators.base import get_generator
-from archilens.models import ArchSnapshot
+from archilens.models import ArchEdge, ArchNode, ArchSnapshot
+from archilens.utils import module_matches
+
+if TYPE_CHECKING:
+    import networkx as nx
 
 logger = logging.getLogger(__name__)
 
@@ -176,7 +181,11 @@ def run_full_pipeline(
 # ---------------------------------------------------------------------------
 
 
-def _analyze_with_progress(files, modules, repo_path):
+def _analyze_with_progress(
+    files: list[SourceFile],
+    modules: dict[str, Module],
+    repo_path: Path,
+) -> tuple[list[ArchNode], list[ArchEdge], nx.DiGraph]:
     """Run dependency analysis with a rich progress bar for large repos."""
 
     # Only show the progress bar for repos with enough files to matter
@@ -209,15 +218,12 @@ def _apply_capability_mappings(
     config: ArchiLensConfig,
 ) -> None:
     """Map modules to business capabilities based on config."""
-    import fnmatch
-
     for cap in config.capabilities:
         matched_modules: list[str] = []
         for node in snapshot.get_module_nodes():
             module_path = node.file_path or node.id.replace("module:", "")
             for pattern in cap.modules:
-                clean_pattern = pattern.replace("**", "*")
-                if fnmatch.fnmatch(module_path, clean_pattern):
+                if module_matches(module_path, pattern):
                     matched_modules.append(node.id)
                     node.capability = cap.name
                     break
