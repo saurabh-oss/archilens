@@ -1,0 +1,89 @@
+# =============================================================================
+# ArchiLens example config — Spring
+# =============================================================================
+# Written for spring-projects/spring-petclinic
+# (https://github.com/spring-projects/spring-petclinic) at commit
+# 500158f732419217507c7656904b8e6aa1bcc0d6 (main, checked 2026-10-25).
+#
+# To try it: copy this file to the root of a spring-petclinic checkout as
+# `.archilens.yml`, then run from that root:
+#
+#     archilens analyze --repo <clone>
+#     archilens check   --repo <clone>   # passes cleanly at the commit above
+#
+# PetClinic is the canonical Spring Boot sample: a small monolith organised
+# by domain package (owner, vet) over a shared model package, with plain
+# Spring Data JPA repositories and Thymeleaf controllers — no service layer.
+# The modules below are exactly what `archilens init` finds in that repo:
+#
+#   - .../petclinic/owner   (12 files)
+#   - .../petclinic/vet     ( 6 files)
+#   - .../petclinic/system  ( 5 files)
+#   - .../petclinic/model   ( 4 files)
+#   - .../petclinic         ( 3 files: application bootstrap + runtime hints)
+
+project:
+  name: "Spring PetClinic"
+  description: "Spring Boot sample clinic: owners, pets and visits, plus the vets who treat them"
+  type: "monolith"
+
+capabilities:
+  - name: "Owners & Pets"
+    description: "Registering owners, their pets and pet visits — controllers, JPA repositories, validation and formatters"
+    modules:
+      - "src/main/java/org/springframework/samples/petclinic/owner/**"
+
+  - name: "Veterinarians"
+    description: "The vets and their specialties, exposed as a read-only listing"
+    modules:
+      - "src/main/java/org/springframework/samples/petclinic/vet/**"
+
+  - name: "Shared Model"
+    description: "Base entity types (BaseEntity, NamedEntity, Person) that both domains build on"
+    modules:
+      - "src/main/java/org/springframework/samples/petclinic/model/**"
+
+  - name: "Platform"
+    description: "Application bootstrap and runtime hints, plus welcome/crash pages and cache/web configuration"
+    modules:
+      - "src/main/java/org/springframework/samples/petclinic"
+      - "src/main/java/org/springframework/samples/petclinic/system/**"
+
+external_systems:
+  - name: "Database"
+    type: "database"
+    description: "JPA persistence — in-memory H2/HSQLDB by default, MySQL or PostgreSQL via Spring profiles"
+
+ci:
+  fail_on: "new"
+  rules:
+    # The model package is a leaf: Owner, Vet and friends inherit from it,
+    # so it must never reach back into a domain package — a dependency
+    # upwards would tangle every domain that shares these base types.
+    - name: "model-is-a-leaf"
+      type: "forbidden-dependency"
+      from: "src/main/java/org/springframework/samples/petclinic/model/**"
+      to: "src/main/java/org/springframework/samples/petclinic/**"
+      action: "fail"
+
+    # Owners/pets and vets are independent domains: neither package imports
+    # the other today, and they should keep meeting only in the shared
+    # model. Cross-imports would couple two features that evolve separately
+    # (visits and billing on one side, rosters on the other).
+    - name: "owner-independent-of-vet"
+      type: "forbidden-dependency"
+      from: "src/main/java/org/springframework/samples/petclinic/owner/**"
+      to: "src/main/java/org/springframework/samples/petclinic/vet/**"
+      action: "fail"
+    - name: "vet-independent-of-owner"
+      type: "forbidden-dependency"
+      from: "src/main/java/org/springframework/samples/petclinic/vet/**"
+      to: "src/main/java/org/springframework/samples/petclinic/owner/**"
+      action: "fail"
+
+    # The package graph is a small DAG (owner -> model, vet -> model,
+    # bootstrap -> model/vet). A cycle here would mean a domain package
+    # started depending back on the bootstrap or on each other.
+    - name: "acyclic-modules"
+      type: "no-cycles"
+      action: "warn"
