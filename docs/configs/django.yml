@@ -1,0 +1,83 @@
+# =============================================================================
+# ArchiLens example config for Django
+# =============================================================================
+# Written against https://github.com/django/django
+# Commit: a05e16a7230fe33d3f43f4a3aaed103cebb42efc
+#
+# Try it:
+#   git clone https://github.com/django/django && cd django
+#   git checkout a05e16a7230fe33d3f43f4a3aaed103cebb42efc
+#   cp /path/to/archilens/docs/configs/django.yml .archilens.yml
+#   archilens check --repo .
+#
+# Expected result: no failures, and two "acyclic-modules" warnings (see below).
+
+project:
+  name: "django"
+  description: "The Web framework for perfectionists with deadlines"
+  type: "library"
+
+analysis:
+  languages: ["python"]
+  module_depth: 2
+  exclude:
+    - "**/__pycache__/**"
+    - "**/*.test.*"
+    - "docs/**"
+    - "scripts/**"
+    - "tests/**"
+    - "js_tests/**"
+
+# Capabilities group Django's packages by what they do. The module paths come
+# from `archilens init` run on this commit.
+capabilities:
+  - name: "Core framework"
+    description: "Settings, app registry, request handling, URL routing"
+    modules:
+      - "django/conf/**"
+      - "django/apps/**"
+      - "django/core/**"
+      - "django/urls/**"
+      - "django/http/**"
+      - "django/middleware/**"
+      - "django/utils/**"
+
+  - name: "Data layer"
+    description: "ORM, models, database backends and migrations"
+    modules:
+      - "django/db/**"
+
+  - name: "Presentation"
+    description: "Views, templates and forms"
+    modules:
+      - "django/views/**"
+      - "django/template/**"
+      - "django/templatetags/**"
+      - "django/forms/**"
+
+  - name: "Batteries included"
+    description: "Optional apps: admin, auth, sessions, sitemaps, ..."
+    modules:
+      - "django/contrib/**"
+
+ci:
+  fail_on: "new"
+  rules:
+    # django.contrib holds optional apps built on top of the framework. If the
+    # ORM imported them, Django's data layer could not be used without them.
+    - name: "db-independent-of-contrib"
+      type: "forbidden-dependency"
+      from: "django/db/**"
+      to: "django/contrib/**"
+      action: "fail"
+
+    # Django has known cycles: the core packages import each other (settings,
+    # apps, http, urls, ...), and contrib.admin, contrib.auth and
+    # contrib.contenttypes depend on one another. This is reported as a warning
+    # rather than a failure because these cycles are long-standing design
+    # choices, not regressions.
+    - name: "acyclic-modules"
+      type: "no-cycles"
+      action: "warn"
+
+    
