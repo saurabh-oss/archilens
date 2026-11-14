@@ -356,7 +356,7 @@ dependency carries (1px for one, up to 4px for the heaviest in that diagram, on 
 of an "N imports" label on every arrow. Above `l1_max_edges` dependencies, L1 draws the heaviest ones,
 after first giving every module its strongest dependency so nothing looks unconnected, and says how
 many it left out. The Mermaid output lists every dependency, with its import count, in a collapsible
-table under the diagram. Django 6.1 has 17 modules and 109 dependencies; its L1 draws 40.
+table under the diagram. Django 6.1 has 17 modules and 111 dependencies; its L1 draws 40.
 
 **Component diagrams for any style of code.** L2 shows what is inside one module:
 
