@@ -306,19 +306,21 @@
     .stage-view { position: relative; height: clamp(380px, 58vh, 640px); perspective: 1200px; }
     .level-view {
       position: absolute; inset: 0; padding: 18px; overflow: auto; display: grid; place-items: center;
+      grid-template: minmax(0, 1fr) / minmax(0, 1fr);  /* a definite cell, so the diagram can fit its height */
       opacity: 0; transform: scale(.78) translateZ(-120px); filter: blur(8px); pointer-events: none;
       transition: opacity .6s var(--ease), transform .9s var(--ease), filter .6s var(--ease);
     }
     .level-view.on { opacity: 1; transform: none; filter: none; pointer-events: auto; }
     .level-view.passed { opacity: 0; transform: scale(1.5) translateZ(160px); filter: blur(10px); }
-    .level-view .mermaid { width: 100%; display: grid; place-items: center; }
-    .level-view .mermaid svg { max-width: 100% !important; height: auto; }
+    /* "Fit" means both ways: a tall diagram (L2 with function lists) must not run off the bottom. */
+    .level-view .mermaid { width: 100%; height: 100%; display: grid; place-items: center; }
+    .level-view .mermaid svg { max-width: 100% !important; max-height: 100%; height: auto; }
     /* Mermaid 11 ignores titleColor for flowchart clusters: subgraph names were navy on navy. */
     .level-view svg .cluster-label text, .level-view svg .cluster-label span, .level-view svg .cluster text { fill: #e8edf5 !important; color: #e8edf5 !important; font-weight: 600; }
     .level-view svg .edgeLabel, .level-view svg .edgeLabel p { color: #cbd5e1 !important; }
-    .stage-view.actual .level-view { place-items: start; }
-    .stage-view.actual .level-view .mermaid { width: max-content; min-width: 100%; }
-    .stage-view.actual .level-view .mermaid svg { max-width: none !important; width: var(--natural, auto) !important; }
+    .stage-view.actual .level-view { place-items: start; grid-template: auto / auto; }
+    .stage-view.actual .level-view .mermaid { width: max-content; min-width: 100%; height: auto; }
+    .stage-view.actual .level-view .mermaid svg { max-width: none !important; max-height: none; width: var(--natural, auto) !important; }
     .zoom { display: inline-flex; gap: 2px; padding: 3px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,.04); }
     .zoom button { padding: 5px 10px; border-radius: 7px; font-size: 12px; font-weight: 600; color: var(--muted); }
     .zoom button.on { background: rgba(255,255,255,.1); color: var(--text); }
@@ -455,7 +457,7 @@
 
 <nav id="nav">
   <div class="container">
-    <a class="logo" href="#top"><span class="hex">⬡</span> ArchiLens <span class="pill" style="margin-left:6px"><span class="dot"></span> v0.17.0</span></a>
+    <a class="logo" href="#top"><span class="hex">⬡</span> ArchiLens <span class="pill" style="margin-left:6px"><span class="dot"></span> v0.18.0</span></a>
     <button class="nav-toggle" id="navToggle" aria-label="Menu" aria-expanded="false">☰</button>
     <div class="nav-links" id="navLinks">
       <a href="#how">How it works</a>
@@ -641,14 +643,14 @@
     <div class="reveal">
       <span class="eyebrow">Four levels · C4-inspired</span>
       <h2 class="title">Zoom from the system to a single call. <span class="grad-text">Like a map.</span></h2>
-      <p class="lead">Scroll to dive. These are the real diagrams ArchiLens generated of <em>itself</em> at v0.15.0 — nothing hand-drawn. On L1, line width shows how many imports a dependency carries.</p>
+      <p class="lead">Scroll to dive. These are the real diagrams ArchiLens generated of <em>itself</em> — nothing hand-drawn. On L1, line width shows how many imports a dependency carries.</p>
     </div>
 
     <div class="levels-layout">
       <div class="steps" id="steps">
         <div class="step on reveal" data-level="0"><div class="num">L0 · SYSTEM CONTEXT</div><h3>Who talks to your system</h3><p>Your system as one box, with what it talks to around it. Databases, caches, queues and well-known APIs are detected from your imports; declare anything else in your config. The 30,000-foot view.</p></div>
         <div class="step reveal" data-level="1" style="--i:1"><div class="num">L1 · MODULE ARCHITECTURE</div><h3>Modules and the imports between them</h3><p>Every module, grouped by the business capability you declare, with one-line AI summaries if you want them. Every edge is a real import, weighted by how many.</p></div>
-        <div class="step reveal" data-level="2" style="--i:2"><div class="num">L2 · COMPONENT DETAIL</div><h3>Inside one module</h3><p>Classes, interfaces and inheritance within a module as a class diagram. Here: the three diagram generators sharing one abstract base.</p></div>
+        <div class="step reveal" data-level="2" style="--i:2"><div class="num">L2 · COMPONENT DETAIL</div><h3>Inside one module</h3><p>Classes and files of functions within a module, with inheritance and the imports between files. Here: three diagram generators sharing one abstract base, and the function files they import.</p></div>
         <div class="step reveal" data-level="3" style="--i:3"><div class="num">L3 · PROCESS FLOW</div><h3>What happens at runtime</h3><p>Sequence diagrams inferred from entry points, found automatically from <code>pyproject.toml</code> scripts, <code>package.json</code>, <code>main.go</code> and friends. Here: an agent calling the MCP server.</p></div>
       </div>
 
@@ -849,7 +851,7 @@
     <span class="k">steps</span>:
       - <span class="k">uses</span>: actions/checkout@v7
         <span class="k">with</span>: { <span class="k">fetch-depth</span>: <span class="n">0</span> }      <span class="c"># the diff needs the base commit</span>
-      - <span class="k">uses</span>: saurabh-oss/archilens@v0.17.0
+      - <span class="k">uses</span>: saurabh-oss/archilens@v0.18.0
         <span class="k">with</span>:
           <span class="k">fail-on-violations</span>: <span class="s">"true"</span>
           <span class="c"># optional AI review, billed to your own key:</span>
@@ -984,7 +986,7 @@
   const captions = [
     ['L0', '<b>System context</b> · your system and the external systems around it'],
     ['L1', '<b>Module architecture</b> · modules grouped by capability, edges from real imports'],
-    ['L2', '<b>Component detail</b> · classes and inheritance inside one module'],
+    ['L2', '<b>Component detail</b> · classes, files of functions and their imports inside one module'],
     ['L3', '<b>Process flow</b> · a sequence diagram from an entry point'],
   ];
   let focus = 1, timer;
@@ -1169,9 +1171,47 @@
     class C3["PlantUMLGenerator"] {
         +archilens/generators/plantuml.py
     }
+    class C4["base.py"] {
+        <<functions>>
+        +archilens/generators/base.py
+        10 functions, 8 listed
+        +select_l1_edges()
+        +stroke_width()
+        +omitted_note()
+        +select_l2()
+        +l2_note()
+        +member_names()
+        +component_kind()
+        +l0_systems()
+    }
+    class C5["diff_report.py"] {
+        <<functions>>
+        +archilens/generators/diff_report.py
+        +format_diff_as_markdown()
+    }
+    class C6["mermaid.py"] {
+        <<functions>>
+        +archilens/generators/mermaid.py
+        +generate_all_diagrams()
+        +generate_system_context()
+        +generate_module_architecture()
+        +generate_component_detail()
+        +generate_process_flow()
+        +sequence_diagram()
+        +escape_label()
+        +sanitize_id()
+    }
     C0 <|-- C1
     C0 <|-- C2
-    C0 <|-- C3`,
+    C0 <|-- C3
+    C1 ..> C4
+    C3 ..> C4
+    C4 ..> C1
+    C4 ..> C3
+    C4 ..> C6
+    C5 ..> C4
+    C5 ..> C6
+    C6 ..> C4`,
 `sequenceDiagram
     participant p0 as CLI
     participant p1 as MCP Server

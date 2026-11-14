@@ -9,6 +9,46 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.18.0] — 2026-11-14
+
+### Added
+- **Functions are components.** L2 used to draw classes only, so code written as functions had no
+  component diagram: Express had none at all. Now a file's top-level functions are one component,
+  named after the file and listing them. Express's `lib` is six boxes (`application.js` with `use`,
+  `route`, `engine`…); ArchiLens itself went from 5 modules with an L2 diagram to all 12.
+  - Methods and nested functions are not a file's functions. A file with public and private
+    functions lists the public ones; beside a class, private helpers alone are not a second box.
+  - A Vue or Svelte component lists the functions of its script.
+- **JavaScript and TypeScript functions bound to a name are recognised:** `const f = () => {}`,
+  `exports.f = function () {}` and `app.use = function use() {}`, as well as `function f() {}`.
+- **L2 draws the imports between the files of a module,** as dashed arrows, beside inheritance. An
+  import says which file uses which, not which class in it, so it is drawn from and to a file's
+  functions or its only class.
+- **`diagrams.l2_max_components`** (default 60, 0 = all). Above it, L2 draws the components with the
+  most relationships inside the module and says so; the Mermaid output lists every component in a
+  collapsible table.
+- `archilens diff` and the PR comment report a new or removed file of functions. Imports inside a
+  module are not reported: they change no dependency between modules.
+- The MCP server's `L2:<module>` context lists each file's functions.
+
+### Changed
+- `archilens history` counts files of functions as components: the "Classes" column is now
+  "Components", and "Modules + classes" in the report is "Modules + components". Dependency
+  counts are unchanged.
+
+### Fixed
+- **L2 diagrams of very large modules did not render.** Django's `db` module has 617 components,
+  more than Mermaid will draw; `l2_max_components` keeps every L2 within what renders.
+- **A file path with brackets broke its box in Mermaid.** `routes/(app)/[id]/page.ts`, as SvelteKit
+  and Next.js name route folders, was read as a method. Brackets, braces and `#` in a path are now
+  written as character codes.
+- **D2 failed on a name containing `$`,** which D2 reads as a substitution and JavaScript allows in
+  names.
+- The MCP server's L1 summary counted inheritance between classes among its "edges" and could list
+  one under "Key Dependencies". It now counts dependencies between modules only.
+
+---
+
 ## [0.17.0] — 2026-11-14
 
 ### Added
@@ -594,7 +634,8 @@ pointing at generated files not in the repository).
 - GitHub Action composite workflow
 - `.archilens.yml` configuration schema
 
-[Unreleased]: https://github.com/saurabh-oss/archilens/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/saurabh-oss/archilens/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/saurabh-oss/archilens/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/saurabh-oss/archilens/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/saurabh-oss/archilens/compare/v0.15.1...v0.16.0
 [0.15.1]: https://github.com/saurabh-oss/archilens/compare/v0.15.0...v0.15.1

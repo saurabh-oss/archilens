@@ -76,6 +76,8 @@ class DiagramConfig:
     theme: str = "default"
     #: Most dependencies drawn on L1, heaviest first (0 = all); see generators.base.select_l1_edges
     l1_max_edges: int = 40
+    #: Most components drawn on one L2 diagram, most connected first (0 = all); see generators.base.select_l2
+    l2_max_components: int = 60
 
 
 DEFAULT_MODEL = "claude-opus-5-5"
@@ -300,6 +302,7 @@ def _parse_config(raw: dict[str, Any]) -> ArchiLensConfig:
             levels=_unless_null(diagrams_raw.get("levels"), DiagramConfig().levels),
             theme=diagrams_raw.get("theme", "default"),
             l1_max_edges=int(diagrams_raw.get("l1_max_edges", 40)),
+            l2_max_components=int(diagrams_raw.get("l2_max_components", 60)),
         ),
         ai=AIConfig(
             provider=ai_raw.get("provider", "anthropic"),

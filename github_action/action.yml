@@ -16,7 +16,7 @@ inputs:
     default: "."
   install:
     description: >-
-      What to pip-install: a version spec such as "archilens==0.17.0" to pin a release
+      What to pip-install: a version spec such as "archilens==0.18.0" to pin a release
       (recommended), or a local path such as "." to test ArchiLens's own checkout.
     required: false
     default: "archilens"

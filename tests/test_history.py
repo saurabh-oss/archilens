@@ -64,7 +64,8 @@ def test_each_ref_is_really_analysed(repo):
     assert v1.dependencies == []
     assert sorted(v2.modules) == ["app/orders", "app/payments", "app/shipping"]  # tests/ is not a module
     assert v2.dependencies == [("app/orders", "app/payments")]
-    assert v2.edge_count == 1 and v2.node_count == 3 + 2  # 3 modules + OrderService, Carrier
+    # 3 modules + OrderService, Carrier + gateway.py, a file of functions
+    assert v2.edge_count == 1 and v2.node_count == 3 + 2 + 1
     assert v2.file_count == 3
     assert head.dependencies == [("app/orders", "app/payments"), ("app/shipping", "app/payments")]
 

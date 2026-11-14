@@ -126,6 +126,8 @@ class FunctionInfo:
     line_number: int = 0
     is_method: bool = False
     parent_class: str | None = None
+    #: Declared at the top of the file: not a method, and not nested in another function
+    top_level: bool = False
 
 
 def analyze_dependencies(
@@ -216,33 +218,63 @@ def analyze_dependencies(
         )
         nodes.append(node)
 
-    # Phase 3: Build component-level nodes (L2) from classes
+    # Phase 3: Build component-level nodes (L2): classes, then files of functions
     module_nodes = {n.id: n for n in nodes}
-    for cls in all_classes:
-        parent_id = f"module:{file_to_module_map.get(cls.file_path, ROOT_MODULE)}"
+    language_of = {f.relative_path: f.language for f in files}
+    functions_in = _functions_by_file(all_functions, language_of)
+    #: file -> the component nodes declared in it
+    components_in: dict[str, list[ArchNode]] = {}
 
-        node = ArchNode(
-            id=f"class:{cls.file_path}:{cls.name}",
-            name=cls.name,
-            node_type=NodeType.COMPONENT if cls.is_component else NodeType.CLASS,
-            level=DiagramLevel.COMPONENT,
-            file_path=cls.file_path,
-            line_start=cls.line_number,
-            parent=parent_id,
-        )
+    def add_component(node: ArchNode) -> None:
         nodes.append(node)
+        components_in.setdefault(node.file_path or "", []).append(node)
+        if node.parent in module_nodes:
+            module_nodes[node.parent].children.append(node.id)
 
-        # Register as child of parent module
-        if parent_id in module_nodes:
-            module_nodes[parent_id].children.append(node.id)
+    for cls in all_classes:
+        add_component(
+            ArchNode(
+                id=f"class:{cls.file_path}:{cls.name}",
+                name=cls.name,
+                node_type=NodeType.COMPONENT if cls.is_component else NodeType.CLASS,
+                level=DiagramLevel.COMPONENT,
+                file_path=cls.file_path,
+                line_start=cls.line_number,
+                parent=f"module:{file_to_module_map.get(cls.file_path, ROOT_MODULE)}",
+                # A Vue or Svelte component is its file, so the script's functions are its own.
+                members=functions_in.get(cls.file_path, []) if cls.is_component else [],
+            )
+        )
+
+    # A file's top-level functions are one component, named after the file. Without this,
+    # code written as functions (Express, Go packages, most utility modules) has no L2 at all.
+    for file_path, names in sorted(functions_in.items()):
+        declared = components_in.get(file_path, [])
+        if any(c.node_type == NodeType.COMPONENT for c in declared):
+            continue  # already the Vue/Svelte component above
+        # Beside a class, private helpers alone are not a second component.
+        if declared and not _is_public(names[0], language_of.get(file_path, "")):
+            continue
+        add_component(
+            ArchNode(
+                id=f"functions:{file_path}",
+                name=file_path.rsplit("/", 1)[-1],
+                node_type=NodeType.FUNCTION,
+                level=DiagramLevel.COMPONENT,
+                file_path=file_path,
+                parent=f"module:{file_to_module_map.get(file_path, ROOT_MODULE)}",
+                members=names,
+            )
+        )
 
     # Phase 4: Resolve imports to files, then aggregate at module level.
     # Each distinct (file, imported path) pair counts once, so an edge's weight is
     # the number of import statements across files, not repeated mentions.
     edges: list[ArchEdge] = []
     resolver = ImportResolver(repo_path, file_to_module_map, _candidate_paths(repo_path))
-    language_of = {f.relative_path: f.language for f in files}
     module_deps: dict[tuple[str, str], int] = {}
+    #: (importing file, imported file) inside one module: the dependencies L2 draws
+    file_deps: set[tuple[str, str]] = set()
     # Imports that are not files in this repository: the standard library and third-party
     # packages. analyzers.external reads external systems out of them.
     unresolved: list[tuple[str, str, str]] = []
@@ -258,6 +290,8 @@ def analyze_dependencies(
         if target_module and target_module != source_module:
             key = (source_module, target_module)
             module_deps[key] = module_deps.get(key, 0) + 1
+        elif target_file and target_file != source_path:
+            file_deps.add((source_path, target_file))
 
     for (src, tgt), weight in sorted(module_deps.items()):
         edge = ArchEdge(
@@ -283,6 +317,18 @@ def analyze_dependencies(
                     label="extends",
                 )
                 edges.append(edge)
+
+    # Phase 5b: Imports between files of one module, as dependencies between their components.
+    # An import says which file uses which, not which class in it, so it is drawn only where
+    # that is not a guess: from and to a file's functions, or its only class.
+    component_deps: set[tuple[str, str]] = set()
+    for source_path, target_file in file_deps:
+        importer = _file_component(components_in, source_path)
+        imported = _file_component(components_in, target_file)
+        if importer and imported:
+            component_deps.add((importer, imported))
+    for importer, imported in sorted(component_deps):
+        edges.append(ArchEdge(source=importer, target=imported, edge_type=EdgeType.DEPENDENCY, label="imports"))
 
     # Phase 6: Build NetworkX graph for analysis
     graph = nx.DiGraph()
@@ -425,6 +471,7 @@ def _extract_functions(
                 name=fn.name,
                 file_path=source_file.relative_path,
                 line_number=fn.line,
+                top_level=fn.top_level,
             )
             for fn in ts_result.functions
         ]
@@ -438,14 +485,57 @@ def _extract_functions(
             if name.startswith("__") and name.endswith("__"):
                 continue
             line_num = content[: match.start()].count("\n") + 1
+            # Without a syntax tree, "starts its line" stands in for "top of the file".
+            line_start = content.rfind("\n", 0, match.start()) + 1
+            prefix = content[line_start : match.start()]
+            before = prefix + match.group(0)[: match.start(1) - match.start()]
             functions.append(
                 FunctionInfo(
                     name=name,
                     file_path=source_file.relative_path,
                     line_number=line_num,
+                    top_level=source_file.language != "java" and not before[:1].isspace(),
                 )
             )
     return functions
+
+
+def _is_public(name: str, language: str) -> bool:
+    """Whether a top-level function is part of its file's interface, by the language's convention."""
+    if language == "go":
+        return name[:1].isupper()
+    return not name.startswith("_")
+
+
+def _functions_by_file(functions: list[FunctionInfo], language_of: dict[str, str]) -> dict[str, list[str]]:
+    """
+    file -> names of its top-level functions, in source order: the public ones, or all of them
+    when none is public (a file of private helpers is still a part of its module). Methods and
+    nested functions are not the file's functions, so they are left out.
+    """
+    by_file: dict[str, list[FunctionInfo]] = {}
+    for fn in functions:
+        if fn.top_level:
+            by_file.setdefault(fn.file_path, []).append(fn)
+    result: dict[str, list[str]] = {}
+    for file_path, found in by_file.items():
+        language = language_of.get(file_path, "")
+        found.sort(key=lambda fn: fn.line_number)
+        public = [fn.name for fn in found if _is_public(fn.name, language)]
+        result[file_path] = list(dict.fromkeys(public or [fn.name for fn in found]))
+    return result
+
+
+def _file_component(components_in: dict[str, list[ArchNode]], file_path: str) -> str | None:
+    """
+    The one component an import of (or from) *file_path* belongs to: the file's functions, or
+    its only class. None for a file that declares several classes and no functions.
+    """
+    declared = components_in.get(file_path, [])
+    for node in declared:
+        if node.node_type == NodeType.FUNCTION:
+            return node.id
+    return declared[0].id if len(declared) == 1 else None
 
 
 #: Languages whose imports and classes ArchiLens reads. Files in any other language are

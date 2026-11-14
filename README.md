@@ -59,7 +59,7 @@ capability. Corrections welcome — please open an issue.</sub>
 ```
 L0: System Context         ← Your system as a black box + external actors
 L1: Module Architecture    ← Major modules/services + dependencies
-L2: Component Detail       ← Classes, interfaces inside a module
+L2: Component Detail       ← Classes and files of functions inside a module, and their imports
 L3: Process Flows          ← Runtime request lifecycles (AI-inferred)
 ```
 
@@ -196,7 +196,7 @@ archilens serve-mcp --repo /path/to/repo --transport sse --port 8766
 
 | Tool | What it answers |
 |---|---|
-| `get_architecture_context(scope)` | Compact module map (`L1`), external systems (`L0`), one module's classes (`L2:<module>`), or capability groupings |
+| `get_architecture_context(scope)` | Compact module map (`L1`), external systems (`L0`), one module's classes and functions (`L2:<module>`), or capability groupings |
 | `get_module_context(file_path)` | Which module owns a file, its capability, size, dependencies and dependants |
 | `check_dependency_allowed(source_file, target_module)` | Whether a new import would break a rule: a forbidden dependency (by path or capability), a new cycle, or a fan-out limit |
 | `find_capability_owner(feature_description)` | Which module and capability a feature most likely belongs to |
@@ -343,6 +343,7 @@ diagrams:
   output_dir: ".archilens/diagrams"
   format: "mermaid"   # mermaid | d2 | plantuml
   l1_max_edges: 40     # most dependencies drawn on L1, heaviest first; 0 draws all
+  l2_max_components: 60  # most components drawn on one L2, most connected first; 0 draws all
   levels:
     - { level: 0, enabled: true }
     - { level: 1, enabled: true }
@@ -356,6 +357,27 @@ of an "N imports" label on every arrow. Above `l1_max_edges` dependencies, L1 dr
 after first giving every module its strongest dependency so nothing looks unconnected, and says how
 many it left out. The Mermaid output lists every dependency, with its import count, in a collapsible
 table under the diagram. Django 6.1 has 17 modules and 109 dependencies; its L1 draws 40.
+
+**Component diagrams for any style of code.** L2 shows what is inside one module:
+
+- **Classes and interfaces,** with inheritance.
+- **Files of functions.** A file's top-level functions are one box, named after the file and
+  listing them. This is what gives Express, a Go package or a folder of utilities a component
+  diagram at all: Express's `lib` is six boxes (`application.js` with `use`, `route`, `engine`…,
+  `response.js` with `send`, `json`…), where it used to have no L2.
+  - Functions bound to a name count: `const f = () => {}` and `exports.f = function () {}` as much
+    as `function f() {}`. Methods and nested functions do not.
+  - A file with public and private functions lists the public ones (no leading `_`; exported, in
+    Go). Eight are listed; a longer file says how many it has.
+  - Beside a class, private helpers alone are not a second box.
+- **Imports between the files of the module,** as dashed arrows. An import says which file uses
+  which, not which class in it, so it is drawn from and to a file's functions or its only class. A
+  file that declares several classes and no functions gets none.
+
+Above `l2_max_components` components, L2 draws the ones with the most relationships inside the
+module, and the Mermaid output lists every component in a collapsible table. Django's `db` module
+has 617; its L2 draws 60. Pull-request comments report a new or removed file of functions, and
+leave out imports inside a module: those change no dependency between modules.
 
 ### AI Configuration
 
@@ -486,7 +508,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # the diff needs the base commit
-      - uses: saurabh-oss/archilens@v0.17.0
+      - uses: saurabh-oss/archilens@v0.18.0
         with:
           fail-on-violations: "true"   # fail the job on rules with action: "fail"
           # Optional AI review in the PR comment, billed to your own key:
@@ -497,7 +519,7 @@ jobs:
 | Input | Default | Meaning |
 |---|---|---|
 | `repo-path` | `.` | Repository to analyse |
-| `install` | `archilens` | What to `pip install`: pin a release such as `archilens==0.17.0` (recommended) |
+| `install` | `archilens` | What to `pip install`: pin a release such as `archilens==0.18.0` (recommended) |
 | `enable-ai` | `false` | `"true"` opens the PR comment with an AI review. One request per push, plus one per entry-point file the PR adds (at most two). Needs `anthropic-api-key`; rule checks and `fail-on-violations` never use AI |
 | `ai-diagrams` | `false` | With `enable-ai`, `"true"` also adds AI module summaries, process flows and patterns to the uploaded diagrams: about one request per module on every run |
 | `anthropic-api-key` | — | Passed as `ANTHROPIC_API_KEY`. Store it as a secret in your own repository: usage is billed to your key, and GitHub doesn't pass secrets to PRs from forks |

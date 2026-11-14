@@ -73,6 +73,20 @@ def _class(name: str, path: str, module: str, kind: NodeType = NodeType.CLASS) -
     )
 
 
+def _functions(file_name: str, module: str, members: list[str]) -> ArchNode:
+    """A file of functions, as analyze_dependencies builds it."""
+    path = f"{module}/{file_name}"
+    return ArchNode(
+        id=f"functions:{path}",
+        name=file_name,
+        node_type=NodeType.FUNCTION,
+        level=DiagramLevel.COMPONENT,
+        file_path=path,
+        parent=f"module:{module}",
+        members=members,
+    )
+
+
 def fixture(name: str, texts: dict[str, str]) -> tuple[ArchSnapshot, ArchiLensConfig]:
     """A snapshot exercising every diagram feature; *texts* supplies the names and descriptions."""
     t = texts
@@ -86,13 +100,19 @@ def fixture(name: str, texts: dict[str, str]) -> tuple[ArchSnapshot, ArchiLensCo
         _class(t["class_2"], "src/orders/legacy/base.py", "src/orders"),  # same name, other file
         _class("Gateway", "src/payments/gateway.py", "src/payments"),
     ]
-    a.children = [x.id for x in classes[:4]]
+    # Files of functions: a short list, and one long enough to end in "(and N more)".
+    helpers = _functions(t["functions_1"], "src/orders", ["price", "$format", "_round"])
+    handlers = _functions(t["functions_2"], "src/orders", [f"handle_{i}" for i in range(12)])
+    classes += [helpers, handlers]
+    a.children = [x.id for x in classes if x.parent == a.id]
     b.children = [classes[4].id]
     edges = [
         ArchEdge(source=c.id, target=a.id, edge_type=EdgeType.DEPENDENCY, label="12 imports", weight=12),
         ArchEdge(source=a.id, target=b.id, edge_type=EdgeType.DEPENDENCY, label="3 imports", weight=3),
         ArchEdge(source=classes[0].id, target=classes[1].id, edge_type=EdgeType.INHERITANCE, label="extends"),
         ArchEdge(source=classes[0].id, target=classes[2].id, edge_type=EdgeType.IMPLEMENTATION, label="implements"),
+        ArchEdge(source=handlers.id, target=helpers.id, edge_type=EdgeType.DEPENDENCY, label="imports"),
+        ArchEdge(source=handlers.id, target=classes[0].id, edge_type=EdgeType.DEPENDENCY, label="imports"),
     ]
     flow = ProcessFlow(
         id="flow:checkout",
@@ -144,6 +164,8 @@ RICH = {
     "class_1": "OrderService",
     "class_2": "BaseService",
     "class_3": "Repository",
+    "functions_1": "pricing.py",
+    "functions_2": "handlers.py",
     "flow": "Checkout Flow",
     "flow_description": "Customer places an order",
     "actor_1": "Client",
@@ -168,6 +190,8 @@ HOSTILE = {
     "class_1": "Repo<Order>",
     "class_2": "Base Service",
     "class_3": "IRepo[T]",
+    "functions_1": "price utils (v2) #1.js",
+    "functions_2": "[id].handlers.ts",
     "flow": 'Checkout: "fast" path; #2',
     "flow_description": "Places an order: payment & <confirm>\nline two",
     "actor_1": "Client (web)",
