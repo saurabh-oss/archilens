@@ -201,6 +201,11 @@ a change to `.archilens.yml`, or an ArchiLens upgrade. Snapshots of clean work t
 
 The `.archilens.yml` file controls all analysis behaviour.
 
+Working examples for well-known projects live in
+[`docs/configs/`](docs/configs/) — currently a Spring example written
+against spring-petclinic, showing one way to name capabilities and rules
+for a real codebase.
+
 ### Project
 
 ```yaml
