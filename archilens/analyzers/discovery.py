@@ -30,8 +30,14 @@ EXTENSION_MAP: dict[str, str] = {
     ".py": "python",
     ".js": "javascript",
     ".jsx": "javascript",
+    ".mjs": "javascript",
+    ".cjs": "javascript",
     ".ts": "typescript",
     ".tsx": "typescript",
+    ".mts": "typescript",
+    ".cts": "typescript",
+    ".vue": "vue",
+    ".svelte": "svelte",
     ".java": "java",
     ".go": "go",
     ".rs": "rust",
@@ -43,8 +49,29 @@ EXTENSION_MAP: dict[str, str] = {
     ".h": "c",
     ".hpp": "cpp",
     ".kt": "kotlin",
+    ".kts": "kotlin",
     ".swift": "swift",
     ".scala": "scala",
+}
+
+#: How each language is written in messages to the user.
+LANGUAGE_NAMES: dict[str, str] = {
+    "c": "C",
+    "cpp": "C++",
+    "csharp": "C#",
+    "go": "Go",
+    "java": "Java",
+    "javascript": "JavaScript",
+    "kotlin": "Kotlin",
+    "php": "PHP",
+    "python": "Python",
+    "ruby": "Ruby",
+    "rust": "Rust",
+    "scala": "Scala",
+    "svelte": "Svelte",
+    "swift": "Swift",
+    "typescript": "TypeScript",
+    "vue": "Vue",
 }
 
 # Directories never worth walking when Git can't tell us what is ignored.

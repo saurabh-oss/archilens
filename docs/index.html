@@ -455,7 +455,7 @@
 
 <nav id="nav">
   <div class="container">
-    <a class="logo" href="#top"><span class="hex">⬡</span> ArchiLens <span class="pill" style="margin-left:6px"><span class="dot"></span> v0.15.1</span></a>
+    <a class="logo" href="#top"><span class="hex">⬡</span> ArchiLens <span class="pill" style="margin-left:6px"><span class="dot"></span> v0.16.0</span></a>
     <button class="nav-toggle" id="navToggle" aria-label="Menu" aria-expanded="false">☰</button>
     <div class="nav-links" id="navLinks">
       <a href="#how">How it works</a>
@@ -620,7 +620,7 @@
       <div class="pipe">
         <i class="pulse"></i><i class="pulse two"></i><i class="pulse three"></i>
         <div class="pipe-node"><div class="ic">📂</div><h4>Discover</h4><p>Walks what Git tracks, so <code>.gitignore</code> already excludes build output. Tests are tagged, not dropped.</p><span class="k">git ls-files</span></div>
-        <div class="pipe-node"><div class="ic">🌳</div><h4>Parse</h4><p>Tree-sitter reads classes, functions, imports and inheritance with line precision. Regex fallback for other languages.</p><span class="k">tree-sitter</span></div>
+        <div class="pipe-node"><div class="ic">🌳</div><h4>Parse</h4><p>Tree-sitter reads classes, functions, imports and inheritance with line precision. Vue and Svelte components are read through their script blocks.</p><span class="k">tree-sitter</span></div>
         <div class="pipe-node"><div class="ic">🧭</div><h4>Resolve</h4><p>Imports become files, per language: Python packages and <code>src/</code>, tsconfig paths and workspaces, Java packages, Go modules.</p><span class="k">per-language</span></div>
         <div class="pipe-node"><div class="ic">🕸️</div><h4>Graph</h4><p>Modules from your source roots, dependency edges weighted by import count, cycles and fan-out measured.</p><span class="k">networkx</span></div>
         <div class="pipe-node"><div class="ic">🛡️</div><h4>Rules</h4><p>Forbidden dependencies by path or capability, no cycles, max fan-out. On a PR, only <em>new</em> violations fail.</p><span class="k">archilens check</span></div>
@@ -849,7 +849,7 @@
     <span class="k">steps</span>:
       - <span class="k">uses</span>: actions/checkout@v7
         <span class="k">with</span>: { <span class="k">fetch-depth</span>: <span class="n">0</span> }      <span class="c"># the diff needs the base commit</span>
-      - <span class="k">uses</span>: saurabh-oss/archilens@v0.15.1
+      - <span class="k">uses</span>: saurabh-oss/archilens@v0.16.0
         <span class="k">with</span>:
           <span class="k">fail-on-violations</span>: <span class="s">"true"</span>
           <span class="c"># optional AI review, billed to your own key:</span>

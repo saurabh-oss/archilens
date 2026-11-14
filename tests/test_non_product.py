@@ -60,7 +60,7 @@ def test_init_leaves_out_tooling_and_integration_folders_and_says_so(tmp_path):
     ])
     result = CliRunner().invoke(main, ["init", "--repo", str(tmp_path)])
     out = " ".join(result.output.split())
-    assert "Found 3 python files in 2 modules." in out
+    assert "Found 3 Python files in 2 modules." in out
     assert "Left out integration/, scripts/, tools/" in out
 
     written = (tmp_path / ".archilens.yml").read_text(encoding="utf-8")

@@ -21,8 +21,9 @@ from archilens.ai import (
     review_architecture_diff,
 )
 from archilens.ai.cache import AICache
-from archilens.analyzers.dependencies import analyze_dependencies, compute_metrics
+from archilens.analyzers.dependencies import analyze_dependencies, compute_metrics, unanalyzed_languages
 from archilens.analyzers.discovery import Module, SourceFile, discover_files
+from archilens.analyzers.embedded import script_source
 from archilens.config import ArchiLensConfig, load_config
 from archilens.generators.base import get_generator
 from archilens.models import ArchDiff, ArchEdge, ArchNode, ArchSnapshot
@@ -32,6 +33,9 @@ if TYPE_CHECKING:
     import networkx as nx
 
 logger = logging.getLogger(__name__)
+
+#: Notes already logged in this process: `diff` and `history` analyse several refs of one repository.
+_UNANALYZED_WARNED: set[str] = set()
 
 
 def analyze_repository(
@@ -99,7 +103,13 @@ def analyze_repository(
         timestamp=datetime.now(timezone.utc).isoformat(),
         nodes=nodes,
         edges=edges,
+        unanalyzed=unanalyzed_languages(files),
     )
+    # Say so once, instead of quietly drawing modules with nothing between them.
+    note = snapshot.unanalyzed_note()
+    if note and note not in _UNANALYZED_WARNED:
+        _UNANALYZED_WARNED.add(note)
+        logger.warning("%s.", note)
 
     # Apply business capability mappings from config
     _apply_capability_mappings(snapshot, config)
@@ -296,7 +306,8 @@ def _module_outlines(files: list[SourceFile]) -> dict[str, str]:
             text = f.path.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
-        by_module.setdefault(f"module:{f.module}", []).append((f.relative_path, f.language, text))
+        code, code_language = script_source(text, f.language)  # Vue/Svelte: the <script> blocks
+        by_module.setdefault(f"module:{f.module}", []).append((f.relative_path, code_language, code))
     return {module_id: module_outline(entries) for module_id, entries in by_module.items()}
 
 

@@ -74,7 +74,7 @@ class TestInit:
         (tmp_path / "go.mod").write_text("module example.com/shop\n", encoding="utf-8")
 
         result = runner.invoke(main, ["init", "--repo", str(tmp_path)])
-        assert "Found 4 go files in 3 modules." in " ".join(result.output.split())
+        assert "Found 4 Go files in 3 modules." in " ".join(result.output.split())
         written = (tmp_path / ".archilens.yml").read_text(encoding="utf-8")
         config = load_config(tmp_path)
         # Nothing restricts the analysis or invents systems the repository doesn't have.

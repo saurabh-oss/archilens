@@ -8,12 +8,22 @@ on:
 
 jobs:
   test:
-    name: Test (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    # Every Python version on Linux, plus one run each on Windows and macOS: two
+    # Windows-only bugs (a cp1252 crash, invalid file names) were once found by hand.
+    name: Test (Python ${{ matrix.python-version }}${{ matrix.label }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        include:
+          - os: windows-latest
+            python-version: "3.12"
+            label: ", Windows"
+          - os: macos-latest
+            python-version: "3.12"
+            label: ", macOS"
 
     steps:
       - uses: actions/checkout@v7
