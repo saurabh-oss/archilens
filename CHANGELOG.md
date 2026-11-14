@@ -9,6 +9,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.17.0] — 2026-11-14
+
+### Added
+- **External systems are detected from third-party imports.** Without hand-written config, L0 used to
+  be a single box; the imports ArchiLens already parsed were thrown away. Now a curated catalog of
+  more than 40 systems across Python, npm, JVM and Go packages puts databases, caches, queues, cloud
+  storage and well-known APIs on the L0 diagram, each with the modules that use it. No AI is involved.
+  On Django it finds PostgreSQL, MySQL, Oracle, Redis, Memcached and SMTP; on Spring PetClinic, a SQL
+  database.
+  - Only imports that do not resolve to a file in the repository count, so a package of your own named
+    `kafka` is not Kafka. Ordinary libraries are not systems, and tests don't count.
+  - An ORM alone gives "SQL database" and `boto3` alone gives "AWS"; a specific driver or service
+    replaces the generic entry.
+  - A sub-package can be marked as not evidence: gin imports the MongoDB driver's `bson` package to
+    encode BSON and never talks to MongoDB. Checking real projects caught this.
+  - Declared `external_systems` win: a declared system replaces the detected one of the same name.
+    `analysis.detect_external_systems: false` turns detection off.
+- **`archilens diff` and the PR comment report external-system changes:** a change that starts using
+  a system (a warning: "New external system: Stripe (external API), used by billing"), stops using
+  one, or brings a new module to an existing one.
+- The L0 diagram ends with a table of systems, their type, how each is known, and which modules use
+  it. `init` lists what it detected, the `analyze` summary prints it, and the MCP server's L0 context
+  includes it.
+- External-system type `storage`, drawn as a cylinder like a database.
+
+---
+
 ## [0.16.0] — 2026-11-14
 
 More kinds of projects work. Each gap below was confirmed on a probe project or a real repository
@@ -567,7 +594,8 @@ pointing at generated files not in the repository).
 - GitHub Action composite workflow
 - `.archilens.yml` configuration schema
 
-[Unreleased]: https://github.com/saurabh-oss/archilens/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/saurabh-oss/archilens/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/saurabh-oss/archilens/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/saurabh-oss/archilens/compare/v0.15.1...v0.16.0
 [0.15.1]: https://github.com/saurabh-oss/archilens/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/saurabh-oss/archilens/compare/v0.14.0...v0.15.0

@@ -65,10 +65,14 @@ diagrams:
 #     modules:
 #       - "{{module_b}}/**"
 
-# External systems appear on the L0 diagram around your system.
+# External systems appear on the L0 diagram around your system. ArchiLens detects the common ones
+# from third-party imports (databases, caches, queues, cloud storage, well-known APIs).
+# {{detected_systems}}
+# Declare a system here to describe it yourself, or to add one imports can't reveal. Set
+# `detect_external_systems: false` under `analysis` to turn detection off.
 # external_systems:
 #   - name: "PostgreSQL"
-#     type: "database"  # database | cache | queue | external_api
+#     type: "database"  # database | cache | queue | storage | external_api
 #     description: "Primary data store"
 #   - name: "Stripe API"
 #     type: "external_api"

@@ -202,6 +202,21 @@ def omitted_note(shown: int, total: int) -> str:
     )
 
 
+def l0_systems(snapshot: ArchSnapshot, config: ArchiLensConfig) -> list[tuple[str, str, str, str]]:
+    """
+    The external systems L0 draws, as (name, type, description, source): those declared in the
+    config, then those detected from imports (which never repeat a declared one).
+    """
+    systems = [(e.name, e.type, e.description, "declared in .archilens.yml") for e in config.external_systems]
+    for d in snapshot.detected_systems:
+        systems.append((d.name, d.type, d.used_by(), "detected from imports of " + ", ".join(d.packages)))
+    return systems
+
+
+#: External-system types drawn as a cylinder.
+STORES = ("database", "cache", "storage")
+
+
 def shorten(text: str, width: int) -> str:
     """*text* on one line, cut at a word boundary to at most *width* characters, ending in "…" if cut."""
     text = " ".join(text.split())

@@ -54,6 +54,8 @@ class AnalysisConfig:
         ]
     )
     max_depth: int = 5  # reserved, not used yet
+    #: Add external systems found in third-party imports to L0 (see analyzers.external)
+    detect_external_systems: bool = True
     # Directory levels below a source root (src/, src/main/java, go.mod dir, ...)
     # that name an L1 module. JS/TS workspace packages are always one module each.
     module_depth: int = 2
@@ -289,6 +291,7 @@ def _parse_config(raw: dict[str, Any]) -> ArchiLensConfig:
             entry_points=analysis_raw.get("entry_points") or [],
             exclude=_unless_null(analysis_raw.get("exclude"), AnalysisConfig().exclude),
             max_depth=analysis_raw.get("max_depth", 5),
+            detect_external_systems=bool(_unless_null(analysis_raw.get("detect_external_systems"), True)),
             module_depth=_parse_module_depth(analysis_raw.get("module_depth", 2)),
         ),
         diagrams=DiagramConfig(

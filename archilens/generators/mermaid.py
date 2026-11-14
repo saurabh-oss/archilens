@@ -19,7 +19,9 @@ from pathlib import Path
 from archilens.config import ArchiLensConfig
 from archilens.generators.base import (
     L1_MAX_EDGES,
+    STORES,
     DiagramGenerator,
+    l0_systems,
     omitted_note,
     select_l1_edges,
     shorten,
@@ -93,18 +95,17 @@ def generate_system_context(
     lines.append(f'    {system_id}["{escape_label(snapshot.project_name)}"]:::system')
     lines.append("")
 
-    # External systems
-    for ext in config.external_systems:
-        ext_id = sanitize_id(ext.name)
-
-        if ext.type == "database" or ext.type == "cache":
-            lines.append(
-                f'    {ext_id}[("{escape_label(ext.name)}<br/><small>{escape_label(ext.description)}</small>")]:::database'
-            )
+    # External systems: declared in the config, then detected from imports
+    systems = l0_systems(snapshot, config)
+    for name, kind, description, _ in systems:
+        ext_id = sanitize_id(name)
+        label = escape_label(name)
+        if description:
+            label += f"<br/><small>{escape_label(shorten(description, 70))}</small>"
+        if kind in STORES:
+            lines.append(f'    {ext_id}[("{label}")]:::database')
         else:
-            lines.append(
-                f'    {ext_id}["{escape_label(ext.name)}<br/><small>{escape_label(ext.description)}</small>"]:::external'
-            )
+            lines.append(f'    {ext_id}["{label}"]:::external')
 
         lines.append(f"    {system_id} --> {ext_id}")
 
@@ -116,6 +117,21 @@ def generate_system_context(
 
     lines.append("```")
     lines.append("")
+
+    if systems:
+        lines += ["## External Systems", "", "| System | Type | Source | Used by |", "|---|---|---|---|"]
+        detected = {d.name: d for d in snapshot.detected_systems}
+        for name, kind, _, source in systems:
+            users = ", ".join(f"`{m}`" for m in detected[name].modules) if name in detected else ""
+            lines.append(f"| {_cell(name)} | {kind.replace('_', ' ')} | {_cell(source)} | {_cell(users)} |")
+        lines.append("")
+        if detected:
+            lines += [
+                "<sub>Detected systems come from third-party imports. Declare a system in "
+                "`external_systems` to describe it yourself, or set "
+                "`analysis.detect_external_systems: false` to turn detection off.</sub>",
+                "",
+            ]
 
     # Add detected patterns
     if snapshot.detected_patterns:

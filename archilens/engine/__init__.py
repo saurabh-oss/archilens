@@ -24,6 +24,7 @@ from archilens.ai.cache import AICache
 from archilens.analyzers.dependencies import analyze_dependencies, compute_metrics, unanalyzed_languages
 from archilens.analyzers.discovery import Module, SourceFile, discover_files
 from archilens.analyzers.embedded import script_source
+from archilens.analyzers.external import detect_external_systems
 from archilens.config import ArchiLensConfig, load_config
 from archilens.generators.base import get_generator
 from archilens.models import ArchDiff, ArchEdge, ArchNode, ArchSnapshot
@@ -105,6 +106,12 @@ def analyze_repository(
         edges=edges,
         unanalyzed=unanalyzed_languages(files),
     )
+    if config.analysis.detect_external_systems:
+        snapshot.detected_systems = detect_external_systems(
+            graph.graph.get("unresolved_imports", []), [(e.name, e.type) for e in config.external_systems]
+        )
+        if snapshot.detected_systems:
+            logger.info("  Detected external systems: " + ", ".join(s.name for s in snapshot.detected_systems))
     # Say so once, instead of quietly drawing modules with nothing between them.
     note = snapshot.unanalyzed_note()
     if note and note not in _UNANALYZED_WARNED:

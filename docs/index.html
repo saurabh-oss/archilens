@@ -455,7 +455,7 @@
 
 <nav id="nav">
   <div class="container">
-    <a class="logo" href="#top"><span class="hex">⬡</span> ArchiLens <span class="pill" style="margin-left:6px"><span class="dot"></span> v0.16.0</span></a>
+    <a class="logo" href="#top"><span class="hex">⬡</span> ArchiLens <span class="pill" style="margin-left:6px"><span class="dot"></span> v0.17.0</span></a>
     <button class="nav-toggle" id="navToggle" aria-label="Menu" aria-expanded="false">☰</button>
     <div class="nav-links" id="navLinks">
       <a href="#how">How it works</a>
@@ -646,7 +646,7 @@
 
     <div class="levels-layout">
       <div class="steps" id="steps">
-        <div class="step on reveal" data-level="0"><div class="num">L0 · SYSTEM CONTEXT</div><h3>Who talks to your system</h3><p>Your system as one box, with the external systems from your config around it: repositories, APIs, the agents that query it. The 30,000-foot view.</p></div>
+        <div class="step on reveal" data-level="0"><div class="num">L0 · SYSTEM CONTEXT</div><h3>Who talks to your system</h3><p>Your system as one box, with what it talks to around it. Databases, caches, queues and well-known APIs are detected from your imports; declare anything else in your config. The 30,000-foot view.</p></div>
         <div class="step reveal" data-level="1" style="--i:1"><div class="num">L1 · MODULE ARCHITECTURE</div><h3>Modules and the imports between them</h3><p>Every module, grouped by the business capability you declare, with one-line AI summaries if you want them. Every edge is a real import, weighted by how many.</p></div>
         <div class="step reveal" data-level="2" style="--i:2"><div class="num">L2 · COMPONENT DETAIL</div><h3>Inside one module</h3><p>Classes, interfaces and inheritance within a module as a class diagram. Here: the three diagram generators sharing one abstract base.</p></div>
         <div class="step reveal" data-level="3" style="--i:3"><div class="num">L3 · PROCESS FLOW</div><h3>What happens at runtime</h3><p>Sequence diagrams inferred from entry points, found automatically from <code>pyproject.toml</code> scripts, <code>package.json</code>, <code>main.go</code> and friends. Here: an agent calling the MCP server.</p></div>
@@ -849,7 +849,7 @@
     <span class="k">steps</span>:
       - <span class="k">uses</span>: actions/checkout@v7
         <span class="k">with</span>: { <span class="k">fetch-depth</span>: <span class="n">0</span> }      <span class="c"># the diff needs the base commit</span>
-      - <span class="k">uses</span>: saurabh-oss/archilens@v0.16.0
+      - <span class="k">uses</span>: saurabh-oss/archilens@v0.17.0
         <span class="k">with</span>:
           <span class="k">fail-on-violations</span>: <span class="s">"true"</span>
           <span class="c"># optional AI review, billed to your own key:</span>
