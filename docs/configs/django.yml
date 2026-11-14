@@ -34,6 +34,7 @@ capabilities:
   - name: "Core framework"
     description: "Settings, app registry, request handling, URL routing"
     modules:
+      - "django"  # the top-level package itself: shortcuts, __main__
       - "django/conf/**"
       - "django/apps/**"
       - "django/core/**"
@@ -41,6 +42,8 @@ capabilities:
       - "django/http/**"
       - "django/middleware/**"
       - "django/utils/**"
+      - "django/dispatch/**"
+      - "django/tasks/**"
 
   - name: "Data layer"
     description: "ORM, models, database backends and migrations"
@@ -79,5 +82,3 @@ ci:
     - name: "acyclic-modules"
       type: "no-cycles"
       action: "warn"
-
-    
