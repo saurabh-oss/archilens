@@ -9,6 +9,35 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.16.0] — 2026-11-14
+
+More kinds of projects work. Each gap below was confirmed on a probe project or a real repository
+(VitePress, the SvelteKit RealWorld app) before it was fixed.
+
+### Added
+- **Modern Node projects.** `.mjs`, `.cjs`, `.mts` and `.cts` files are source files. They were not
+  recognised at all, so an ESM project came out as "No source files found".
+- **Vue and Svelte.** Single-file components are read through their `<script>` blocks (TypeScript when
+  a block says `lang="ts"`), with line numbers preserved. Each file is also a component on the L2
+  diagram. Both project types used to find 0 files.
+- **Framework import aliases** that no config file declares: `$lib` (SvelteKit; `$app` and `$env` stay
+  external) and `@/`, `~/` (Vue CLI, Nuxt, Vite), relative to the nearest `package.json` or Svelte
+  config. A project's own `tsconfig` paths are tried first. The SvelteKit RealWorld app went from 0
+  dependencies to `src/routes → src/lib`.
+- **A plain statement when a language isn't analysed.** C#, Kotlin, Rust, Ruby, PHP, C/C++, Swift and
+  Scala files are grouped into modules, but their imports and classes are not read yet. That used to
+  produce modules with nothing between them and no explanation. Now `init`, the `analyze` log (once per
+  run) and a note under the module diagram say, for example, "Not analysed: 120 C# files".
+- **Example configs for real projects** in `docs/configs/`: Spring, written against spring-petclinic
+  (by hiteshchouhan22, #35), and Django, written against django/django (by Taranemp, #36). The first
+  outside contributions to ArchiLens. Thank you both.
+
+### Changed
+- CI also runs the tests on Windows and macOS. Two Windows-only bugs had been found by hand.
+- `init` names languages properly ("Found 4 Go files", not "4 go files").
+
+---
+
 ## [0.15.1] — 2026-10-25
 
 ### Fixed
@@ -538,7 +567,8 @@ pointing at generated files not in the repository).
 - GitHub Action composite workflow
 - `.archilens.yml` configuration schema
 
-[Unreleased]: https://github.com/saurabh-oss/archilens/compare/v0.15.1...HEAD
+[Unreleased]: https://github.com/saurabh-oss/archilens/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/saurabh-oss/archilens/compare/v0.15.1...v0.16.0
 [0.15.1]: https://github.com/saurabh-oss/archilens/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/saurabh-oss/archilens/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/saurabh-oss/archilens/compare/v0.13.0...v0.14.0

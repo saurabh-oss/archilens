@@ -287,9 +287,11 @@ def init(repo: str) -> None:
     """Write a .archilens.yml for this repository, with its languages and modules filled in."""
     from collections import Counter
 
-    from archilens.analyzers.discovery import discover_files
+    from archilens.analyzers.dependencies import unanalyzed_languages
+    from archilens.analyzers.discovery import LANGUAGE_NAMES, discover_files
     from archilens.analyzers.layout import ROOT_MODULE
     from archilens.config import ArchiLensConfig
+    from archilens.models import ArchSnapshot
 
     repo_path = Path(repo).resolve()
     config_path = repo_path / ".archilens.yml"
@@ -336,13 +338,16 @@ def init(repo: str) -> None:
 
     console.print(f"{_OK} Created {config_path}")
     if languages:
-        counts = ", ".join(f"{n} {lang}" for lang, n in languages.most_common())
+        counts = ", ".join(f"{n} {LANGUAGE_NAMES.get(lang, lang)}" for lang, n in languages.most_common())
         plural = "s" * (len(sources) != 1), "s" * (len(module_files) != 1)
         console.print(f"  Found {counts} file{plural[0]} in {len(module_files)} module{plural[1]}.")
     else:
         console.print("  Found no source files yet; the examples in it use placeholder module paths.")
     if extra:
         console.print(f"  Left out {', '.join(f'{d}/' for d in extra)} (see analysis.exclude to keep any of them).")
+    note = ArchSnapshot(project_name="", unanalyzed=unanalyzed_languages(sources)).unanalyzed_note()
+    if note:
+        console.print(f"  [yellow]{note}.[/]")
     console.print("  Next: name your capabilities and rules in it, then run `archilens analyze`.")
 
 

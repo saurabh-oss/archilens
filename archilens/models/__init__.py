@@ -181,6 +181,24 @@ class ArchSnapshot(BaseModel):
     # Mapping: capability name -> list of module IDs
     capability_map: dict[str, list[str]] = Field(default_factory=dict)
 
+    #: Language name -> number of source files ArchiLens found but cannot analyse yet
+    #: (e.g. {"C#": 120}). Their modules exist, with no dependencies or components.
+    unanalyzed: dict[str, int] = Field(default_factory=dict)
+
+    def unanalyzed_note(self) -> str:
+        """One sentence saying which files were found but not analysed; '' if none."""
+        if not self.unanalyzed:
+            return ""
+        parts = [
+            f"{count:,} {name} file{'s' * (count != 1)}"
+            for name, count in sorted(self.unanalyzed.items(), key=lambda item: (-item[1], item[0]))
+        ]
+        listed = parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
+        return (
+            f"Not analysed: {listed}. ArchiLens groups them into modules but does not read their imports "
+            "or classes yet, so those modules show no dependencies"
+        )
+
     def get_nodes_at_level(self, level: DiagramLevel) -> list[ArchNode]:
         """Return all nodes at a specific abstraction level."""
         return [n for n in self.nodes if n.level == level]

@@ -208,6 +208,9 @@ def generate_module_architecture(snapshot: ArchSnapshot, max_edges: int = L1_MAX
     note = omitted_note(len(shown), len(edges))
     lines.append(f"<sub>Line width shows the number of imports.{' ' + note + '.' if note else ''}</sub>")
     lines.append("")
+    if snapshot.unanalyzed:
+        lines.append(f"> **{_cell(snapshot.unanalyzed_note())}.**")
+        lines.append("")
 
     # Module details table
     lines.append("## Module Details")

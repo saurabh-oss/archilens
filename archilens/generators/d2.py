@@ -135,6 +135,8 @@ class D2Generator(DiagramGenerator):
         note = omitted_note(len(shown), len(edges))
         if note:
             lines.append(f"# {note}")
+        if snapshot.unanalyzed:
+            lines.append(f"# {snapshot.unanalyzed_note()}")
         for edge in shown:
             # D2 only accepts whole numbers here ("expected stroke-width to be a number between 0 and 15").
             width = max(1, round(stroke_width(edge.weight, heaviest)))

@@ -11,12 +11,13 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import networkx as nx
 
-from archilens.analyzers.discovery import Module, SourceFile, _candidate_paths
+from archilens.analyzers.discovery import LANGUAGE_NAMES, Module, SourceFile, _candidate_paths
+from archilens.analyzers.embedded import SCRIPT_HOSTS, script_source
 from archilens.analyzers.layout import ROOT_MODULE
 from archilens.analyzers.resolution import ImportResolver
 from archilens.analyzers.treesitter import TSExtractionResult, extract_from_file
@@ -35,7 +36,8 @@ logger = logging.getLogger(__name__)
 # Language-specific import extraction (regex-based fallback)
 # ---------------------------------------------------------------------------
 
-# Patterns for extracting imports across languages
+# Patterns for extracting imports across languages. Its keys, plus the script hosts
+# (Vue, Svelte), are the languages ArchiLens reads imports and classes from.
 IMPORT_PATTERNS: dict[str, list[re.Pattern[str]]] = {
     "python": [
         re.compile(r"^\s*import\s+([\w.]+)", re.MULTILINE),
@@ -111,6 +113,8 @@ class ClassInfo:
     parent_classes: list[str] = field(default_factory=list)
     interfaces: list[str] = field(default_factory=list)
     line_number: int = 0
+    #: A single-file UI component (Vue, Svelte) rather than a class declaration
+    is_component: bool = False
 
 
 @dataclass
@@ -164,10 +168,24 @@ def analyze_dependencies(
             continue
 
         try:
-            ts_result = extract_from_file(source_file.path, source_file.language, content)
-            all_imports.extend(_extract_imports(content, source_file, ts_result))
-            all_classes.extend(_extract_classes(content, source_file, ts_result))
-            all_functions.extend(_extract_functions(content, source_file, ts_result))
+            # A Vue or Svelte file is parsed as the JavaScript/TypeScript in its <script> blocks.
+            code, code_language = script_source(content, source_file.language)
+            parsed = source_file
+            if code_language != source_file.language:
+                parsed = replace(source_file, language=code_language)
+                # The file itself is the component, whether or not its script declares anything.
+                all_classes.append(
+                    ClassInfo(
+                        name=source_file.path.stem,
+                        file_path=source_file.relative_path,
+                        line_number=1,
+                        is_component=True,
+                    )
+                )
+            ts_result = extract_from_file(source_file.path, code_language, code)
+            all_imports.extend(_extract_imports(code, parsed, ts_result))
+            all_classes.extend(_extract_classes(code, parsed, ts_result))
+            all_functions.extend(_extract_functions(code, parsed, ts_result))
         except Exception as exc:
             logger.warning(
                 "Error analysing %s — skipping file (%s)",
@@ -206,7 +224,7 @@ def analyze_dependencies(
         node = ArchNode(
             id=f"class:{cls.file_path}:{cls.name}",
             name=cls.name,
-            node_type=NodeType.CLASS,
+            node_type=NodeType.COMPONENT if cls.is_component else NodeType.CLASS,
             level=DiagramLevel.COMPONENT,
             file_path=cls.file_path,
             line_start=cls.line_number,
@@ -421,6 +439,21 @@ def _extract_functions(
                 )
             )
     return functions
+
+
+#: Languages whose imports and classes ArchiLens reads. Files in any other language are
+#: still grouped into modules, but those modules get no dependencies or components.
+ANALYZED_LANGUAGES = frozenset(IMPORT_PATTERNS) | SCRIPT_HOSTS
+
+
+def unanalyzed_languages(files: list[SourceFile]) -> dict[str, int]:
+    """Language name -> count of non-test files in languages outside ``ANALYZED_LANGUAGES``."""
+    counts: dict[str, int] = {}
+    for f in files:
+        if not f.is_test and f.language not in ANALYZED_LANGUAGES:
+            name = LANGUAGE_NAMES.get(f.language, f.language)
+            counts[name] = counts.get(name, 0) + 1
+    return counts
 
 
 def _is_external_import(path: str) -> bool:

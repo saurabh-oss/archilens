@@ -37,10 +37,20 @@ dependencies the PR changed. <a href="https://raw.githubusercontent.com/saurabh-
 <sub>Based on each project's README and docs as checked in October 2026. ✗ means we found no mention of the
 capability. Corrections welcome — please open an issue.</sub>
 
-> **Language support:** imports are resolved to files in the repository for Python (flat and `src/`
-> layouts, relative imports), JavaScript/TypeScript (relative paths, `tsconfig` path aliases, npm/yarn/pnpm
-> workspace packages), Java (packages, wildcard and static imports) and Go (module paths). Other languages
-> are discovered and counted, but get no dependency edges yet.
+> **Language support:** imports are resolved to files in the repository for:
+>
+> - **Python**: flat and `src/` layouts, relative imports;
+> - **JavaScript and TypeScript**, including `.mjs`, `.cjs`, `.mts` and `.cts`: relative paths, `tsconfig`
+>   path aliases, npm/yarn/pnpm workspace packages, and the framework aliases `$lib` (SvelteKit) and
+>   `@/`, `~/` (Vue CLI, Nuxt, Vite);
+> - **Vue and Svelte** single-file components, read through their `<script>` blocks; each file is also a
+>   component on the L2 diagram;
+> - **Java**: packages, wildcard and static imports;
+> - **Go**: module paths.
+>
+> C#, Kotlin, Rust, Ruby, PHP, C/C++, Swift and Scala files are found and grouped into modules, but their
+> imports and classes are not read yet. ArchiLens says so, in `init`, in the `analyze` log and under the
+> module diagram, rather than drawing modules with nothing between them.
 
 ---
 
@@ -439,7 +449,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # the diff needs the base commit
-      - uses: saurabh-oss/archilens@v0.15.1
+      - uses: saurabh-oss/archilens@v0.16.0
         with:
           fail-on-violations: "true"   # fail the job on rules with action: "fail"
           # Optional AI review in the PR comment, billed to your own key:
@@ -450,7 +460,7 @@ jobs:
 | Input | Default | Meaning |
 |---|---|---|
 | `repo-path` | `.` | Repository to analyse |
-| `install` | `archilens` | What to `pip install`: pin a release such as `archilens==0.15.1` (recommended) |
+| `install` | `archilens` | What to `pip install`: pin a release such as `archilens==0.16.0` (recommended) |
 | `enable-ai` | `false` | `"true"` opens the PR comment with an AI review. One request per push, plus one per entry-point file the PR adds (at most two). Needs `anthropic-api-key`; rule checks and `fail-on-violations` never use AI |
 | `ai-diagrams` | `false` | With `enable-ai`, `"true"` also adds AI module summaries, process flows and patterns to the uploaded diagrams: about one request per module on every run |
 | `anthropic-api-key` | — | Passed as `ANTHROPIC_API_KEY`. Store it as a secret in your own repository: usage is billed to your key, and GitHub doesn't pass secrets to PRs from forks |

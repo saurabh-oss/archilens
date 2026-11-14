@@ -34,8 +34,10 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-_JS_EXTENSIONS = (".ts", ".tsx", ".mts", ".cts", ".d.ts", ".js", ".jsx", ".mjs", ".cjs")
+# Component files come last: `import Cart from './Cart'` means Cart.ts before Cart.vue.
+_JS_EXTENSIONS = (".ts", ".tsx", ".mts", ".cts", ".d.ts", ".js", ".jsx", ".mjs", ".cjs", ".vue", ".svelte")
 _JS_TO_TS = {".js": (".ts", ".tsx"), ".jsx": (".tsx",), ".mjs": (".mts",), ".cjs": (".cts",)}
+_JS_APP_MARKERS = frozenset({"package.json", "svelte.config.js", "svelte.config.ts", "svelte.config.mjs"})
 _JAVA_PACKAGE = re.compile(r"^\s*package\s+([\w.]+)\s*;", re.MULTILINE)
 _GO_MODULE = re.compile(r"^\s*module\s+(\S+)", re.MULTILINE)
 
@@ -67,6 +69,10 @@ class ImportResolver:
         self.tsconfigs = self._tsconfigs(
             p for p in others if posixpath.basename(p) in ("tsconfig.json", "jsconfig.json")
         )
+        # Directories that root a JS app, deepest first: where $lib, @/ and ~/ are relative to.
+        self.js_roots = sorted(
+            {posixpath.dirname(p) for p in others if posixpath.basename(p) in _JS_APP_MARKERS}, key=len, reverse=True
+        )
         self.go_modules = self._go_modules(p for p in others if posixpath.basename(p) == "go.mod")
         self.java_classes, self.java_packages = self._java_index()
 
@@ -79,7 +85,7 @@ class ImportResolver:
         try:
             if language == "python":
                 return self._python(imported, source_path)
-            if language in ("javascript", "typescript"):
+            if language in ("javascript", "typescript", "vue", "svelte"):
                 return self._js(imported, source_path)
             if language == "java":
                 return self._java(imported)
@@ -238,6 +244,18 @@ class ImportResolver:
                     return found
             break  # only the nearest config applies
 
+        # Framework conventions that no config file in the repository declares. None of these
+        # can be an npm package name, and a project's own tsconfig paths were tried first.
+        if spec.startswith("$"):
+            # SvelteKit: $lib is src/lib of the app; $app, $env and $service-worker are virtual modules.
+            if spec == "$lib" or spec.startswith("$lib/"):
+                return self._probe(posixpath.join(self._app_root(source_path), "src/lib", spec[5:]).rstrip("/"))
+            return None
+        if spec.startswith(("@/", "~/")):
+            # Vue CLI, Nuxt and many Vite setups: the app's src/ directory, or the app root itself.
+            root, rest = self._app_root(source_path), spec[2:]
+            return self._probe(posixpath.join(root, "src", rest)) or self._probe(posixpath.join(root, rest))
+
         for name in sorted(self.js_packages, key=len, reverse=True):
             if spec == name or spec.startswith(name + "/"):
                 directory, entries = self.js_packages[name]
@@ -252,6 +270,13 @@ class ImportResolver:
                     posixpath.join(directory, "src", "index")
                 )
         return None
+
+    def _app_root(self, source_path: str) -> str:
+        """The nearest directory above *source_path* holding a package.json or a Svelte config ('' = repo root)."""
+        for root in self.js_roots:
+            if not root or source_path.startswith(root + "/"):
+                return root
+        return ""
 
     def _probe(self, stem: str) -> str | None:
         """Find the source file a JS/TS specifier path refers to."""

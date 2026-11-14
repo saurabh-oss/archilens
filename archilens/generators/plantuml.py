@@ -149,6 +149,8 @@ class PlantUMLGenerator(DiagramGenerator):
         note = omitted_note(len(shown), len(edges))
         if note:
             lines.append(f"' {note}")
+        if snapshot.unanalyzed:
+            lines.append(f"' {snapshot.unanalyzed_note()}")
         for edge in shown:
             width = max(1, round(stroke_width(edge.weight, heaviest)))
             lines.append(f"{_safe_id(edge.source)} -[thickness={width}]-> {_safe_id(edge.target)}")
