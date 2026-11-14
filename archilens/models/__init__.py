@@ -164,6 +164,28 @@ class ProcessFlow(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class DetectedSystem(BaseModel):
+    """An external system the code talks to, detected from its third-party imports."""
+
+    name: str  # e.g. "PostgreSQL"
+    type: str  # database | cache | queue | storage | external_api
+    #: Import roots that revealed it, e.g. ["psycopg2"]
+    packages: list[str] = Field(default_factory=list)
+    #: Paths of the modules that import them
+    modules: list[str] = Field(default_factory=list)
+    #: Evidence of a kind of system, not a specific one ("SQL database", "AWS")
+    generic: bool = False
+
+    def used_by(self, limit: int = 3) -> str:
+        """E.g. "used by orders, billing and 2 more"."""
+        # The last path segment reads better than a Java package path; the full paths stay in `modules`.
+        names = [m.rsplit("/", 1)[-1] if m != "<root>" else "the root package" for m in self.modules]
+        if len(names) > limit:
+            names = names[:limit] + [f"{len(names) - limit} more"]
+        listed = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+        return f"used by {listed}" if names else ""
+
+
 class ArchSnapshot(BaseModel):
     """Complete architecture state at a point in time."""
 
@@ -180,6 +202,9 @@ class ArchSnapshot(BaseModel):
 
     # Mapping: capability name -> list of module IDs
     capability_map: dict[str, list[str]] = Field(default_factory=dict)
+
+    #: External systems detected from third-party imports (see analyzers.external)
+    detected_systems: list[DetectedSystem] = Field(default_factory=list)
 
     #: Language name -> number of source files ArchiLens found but cannot analyse yet
     #: (e.g. {"C#": 120}). Their modules exist, with no dependencies or components.

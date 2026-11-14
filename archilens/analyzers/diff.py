@@ -181,6 +181,44 @@ def compute_diff(base: ArchSnapshot, head: ArchSnapshot) -> ArchDiff:
             )
         )
 
+    # --- External systems (detected from third-party imports) ---
+    base_systems = {s.name: s for s in base.detected_systems}
+    head_systems = {s.name: s for s in head.detected_systems}
+    for name in sorted(head_systems.keys() - base_systems.keys()):
+        system = head_systems[name]
+        diff.entries.append(
+            DiffEntry(
+                change_type="added",
+                entity_type="external",
+                entity_id=f"external:{name}",
+                description=f"New external system: {name} ({_kind(system.type)}), {system.used_by()}",
+                severity="warning",  # the system now depends on something outside itself
+            )
+        )
+    for name in sorted(base_systems.keys() - head_systems.keys()):
+        diff.entries.append(
+            DiffEntry(
+                change_type="removed",
+                entity_type="external",
+                entity_id=f"external:{name}",
+                description=f"External system no longer used: {name}",
+                severity="info",
+            )
+        )
+    for name in sorted(head_systems.keys() & base_systems.keys()):
+        newcomers = sorted(set(head_systems[name].modules) - set(base_systems[name].modules))
+        if newcomers:
+            who = ", ".join(m.removeprefix(_MODULE) for m in newcomers)
+            diff.entries.append(
+                DiffEntry(
+                    change_type="modified",
+                    entity_type="external",
+                    entity_id=f"external:{name}",
+                    description=f"{name} is now also used by {who}",
+                    severity="info",
+                )
+            )
+
     # Build summary
     added = sum(1 for e in diff.entries if e.change_type == "added")
     removed = sum(1 for e in diff.entries if e.change_type == "removed")
@@ -228,6 +266,11 @@ def _group_moves(
         old, new = base_nodes[old_id], head_nodes[new_id]
         groups.setdefault((old.file_path or "", new.file_path or ""), []).append(old.name)
     return {key: sorted(names) for key, names in groups.items()}
+
+
+def _kind(system_type: str) -> str:
+    """ "external_api" -> "external API" for prose."""
+    return "external API" if system_type == "external_api" else system_type
 
 
 def _describe(node: ArchNode) -> str:

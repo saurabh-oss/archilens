@@ -243,11 +243,17 @@ def analyze_dependencies(
     resolver = ImportResolver(repo_path, file_to_module_map, _candidate_paths(repo_path))
     language_of = {f.relative_path: f.language for f in files}
     module_deps: dict[tuple[str, str], int] = {}
+    # Imports that are not files in this repository: the standard library and third-party
+    # packages. analyzers.external reads external systems out of them.
+    unresolved: list[tuple[str, str, str]] = []
 
     for source_path, imported_path in sorted({(imp.source_file, imp.imported_path) for imp in all_imports}):
         source_module = file_to_module_map.get(source_path, ROOT_MODULE)
-        target_file = resolver.resolve(imported_path, language_of.get(source_path, ""), source_path)
+        language = language_of.get(source_path, "")
+        target_file = resolver.resolve(imported_path, language, source_path)
         target_module = file_to_module_map.get(target_file) if target_file else None
+        if target_file is None:
+            unresolved.append((source_module, imported_path, language))
 
         if target_module and target_module != source_module:
             key = (source_module, target_module)
@@ -280,6 +286,7 @@ def analyze_dependencies(
 
     # Phase 6: Build NetworkX graph for analysis
     graph = nx.DiGraph()
+    graph.graph["unresolved_imports"] = unresolved  # (module, imported path, language)
     for node in nodes:
         graph.add_node(node.id, data=node)
     for edge in edges:

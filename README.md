@@ -288,15 +288,52 @@ capabilities:
 
 ### External Systems
 
+The L0 diagram shows what your system talks to. **ArchiLens detects the common ones from your
+third-party imports, with no configuration and no AI:** `psycopg2` means PostgreSQL,
+`@aws-sdk/client-s3` means Amazon S3, `org.springframework.kafka` means Kafka,
+`github.com/redis/go-redis` means Redis. On Django it finds PostgreSQL, MySQL, Oracle, Redis,
+Memcached and SMTP; on Spring PetClinic, a SQL database.
+
+- **What is detected:** more than 40 systems across Python, npm, JVM and Go packages:
+  - databases: PostgreSQL, MySQL, SQL Server, Oracle, MongoDB, Cassandra, DynamoDB, Elasticsearch, …;
+  - caches: Redis, Memcached;
+  - queues: Kafka, RabbitMQ, NATS, SQS, Pub/Sub, …;
+  - cloud storage: S3, Google Cloud Storage, Azure Blob Storage;
+  - well-known APIs: Stripe, Twilio, SendGrid, Slack, GitHub, OpenAI, Anthropic, Sentry, …
+
+  The full list is the catalog in `archilens/analyzers/external.py`.
+- **What is not:** ordinary libraries (`requests`, `lodash`) are not systems. An import that resolves
+  to a file in your repository never counts, so a package of your own named `kafka` is not Kafka.
+  Tests don't count either.
+- **Generic evidence:** an ORM alone gives "SQL database", and `boto3` alone gives "AWS". When a
+  specific driver or service is also imported, only the specific system is shown.
+- **Who uses it:** each system lists the modules that import it, on the diagram and in a table
+  under it.
+- **On pull requests:** `archilens diff` reports a change that starts using a system ("New external
+  system: Stripe (external API), used by billing", as a warning), stops using one, or brings a new
+  module to an existing one ("PostgreSQL is now also used by reporting").
+
+Declare a system to describe it yourself, or to add one that imports can't reveal (a partner's REST
+API called with plain HTTP, say):
+
 ```yaml
 external_systems:
   - name: "PostgreSQL"
-    type: "database"
+    type: "database"        # database | cache | queue | storage | external_api
     description: "Primary data store"
 
   - name: "Stripe API"
     type: "external_api"
     description: "Payment processing"
+```
+
+A declared system replaces the detected one of the same name ("Postgres" covers "PostgreSQL",
+"Stripe API" covers "Stripe"), and a declared database covers the generic "SQL database". To turn
+detection off:
+
+```yaml
+analysis:
+  detect_external_systems: false
 ```
 
 ### Diagram Output
@@ -449,7 +486,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # the diff needs the base commit
-      - uses: saurabh-oss/archilens@v0.16.0
+      - uses: saurabh-oss/archilens@v0.17.0
         with:
           fail-on-violations: "true"   # fail the job on rules with action: "fail"
           # Optional AI review in the PR comment, billed to your own key:
@@ -460,7 +497,7 @@ jobs:
 | Input | Default | Meaning |
 |---|---|---|
 | `repo-path` | `.` | Repository to analyse |
-| `install` | `archilens` | What to `pip install`: pin a release such as `archilens==0.16.0` (recommended) |
+| `install` | `archilens` | What to `pip install`: pin a release such as `archilens==0.17.0` (recommended) |
 | `enable-ai` | `false` | `"true"` opens the PR comment with an AI review. One request per push, plus one per entry-point file the PR adds (at most two). Needs `anthropic-api-key`; rule checks and `fail-on-violations` never use AI |
 | `ai-diagrams` | `false` | With `enable-ai`, `"true"` also adds AI module summaries, process flows and patterns to the uploaded diagrams: about one request per module on every run |
 | `anthropic-api-key` | — | Passed as `ANTHROPIC_API_KEY`. Store it as a secret in your own repository: usage is billed to your key, and GitHub doesn't pass secrets to PRs from forks |

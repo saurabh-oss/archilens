@@ -287,8 +287,9 @@ def init(repo: str) -> None:
     """Write a .archilens.yml for this repository, with its languages and modules filled in."""
     from collections import Counter
 
-    from archilens.analyzers.dependencies import unanalyzed_languages
+    from archilens.analyzers.dependencies import analyze_dependencies, unanalyzed_languages
     from archilens.analyzers.discovery import LANGUAGE_NAMES, discover_files
+    from archilens.analyzers.external import detect_external_systems
     from archilens.analyzers.layout import ROOT_MODULE
     from archilens.config import ArchiLensConfig
     from archilens.models import ArchSnapshot
@@ -302,7 +303,7 @@ def init(repo: str) -> None:
 
     # A quick static discovery (no AI) so the examples use this repository's real modules.
     defaults = ArchiLensConfig()
-    files, _ = discover_files(repo_path, defaults)
+    files, discovered_modules = discover_files(repo_path, defaults)
     sources = [f for f in files if not f.is_test]
     # Root folders that usually hold tooling or test apps rather than product code: excluded in
     # the written config, visibly, since whether they are product code depends on the repository.
@@ -317,6 +318,10 @@ def init(repo: str) -> None:
     if len(modules) > 15:
         listed.append(f"#   ... and {len(modules) - 15} more")
 
+    # External systems the code already talks to, read from its third-party imports.
+    _, _, graph = analyze_dependencies(sources, discovered_modules, repo_path)
+    systems = detect_external_systems(graph.graph.get("unresolved_imports", []))
+
     # The annotated template ships inside the package, so `init` works from a pip install.
     template = (Path(__file__).parent / "templates" / "archilens.example.yml").read_text(encoding="utf-8")
     values = {
@@ -327,6 +332,11 @@ def init(repo: str) -> None:
         "module_b": module_b,
         "module_a_slug": module_a.replace("/", "-"),
         "module_b_slug": module_b.replace("/", "-"),
+        "detected_systems": (
+            "Detected in this repository: " + ", ".join(s.name for s in systems) + "."
+            if systems
+            else "None detected in this repository yet."
+        ),
         "exclude": "\n".join(
             [f'    - "{pattern}"' for pattern in defaults.analysis.exclude]
             + [f'    - "{d}/**"  # {reason}; delete this line to analyse it' for d, reason in extra.items()]
@@ -345,6 +355,8 @@ def init(repo: str) -> None:
         console.print("  Found no source files yet; the examples in it use placeholder module paths.")
     if extra:
         console.print(f"  Left out {', '.join(f'{d}/' for d in extra)} (see analysis.exclude to keep any of them).")
+    if systems:
+        console.print(f"  Detected external systems: {', '.join(s.name for s in systems)}.")
     note = ArchSnapshot(project_name="", unanalyzed=unanalyzed_languages(sources)).unanalyzed_note()
     if note:
         console.print(f"  [yellow]{note}.[/]")
@@ -611,6 +623,12 @@ def _print_summary(snapshot: ArchSnapshot) -> None:
             )
 
         console.print(table)
+
+    # External systems
+    if snapshot.detected_systems:
+        console.print()
+        console.print("[bold]External systems (detected from imports):[/]", end=" ")
+        console.print(", ".join(s.name for s in snapshot.detected_systems))
 
     # Patterns
     if snapshot.detected_patterns:

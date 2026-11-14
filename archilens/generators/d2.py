@@ -19,7 +19,15 @@ from __future__ import annotations
 
 import re
 
-from archilens.generators.base import DiagramGenerator, omitted_note, select_l1_edges, shorten, stroke_width
+from archilens.generators.base import (
+    STORES,
+    DiagramGenerator,
+    l0_systems,
+    omitted_note,
+    select_l1_edges,
+    shorten,
+    stroke_width,
+)
 from archilens.models import (
     ArchSnapshot,
     EdgeType,
@@ -53,16 +61,16 @@ class D2Generator(DiagramGenerator):
         lines.append("}")
         lines.append("")
 
-        for index, ext in enumerate(self.config.external_systems):
-            ext_id = f"ext_{index}_{_id(ext.name)}"
-            shape = "cylinder" if ext.type in ("database", "cache") else "rectangle"
-            lines.append(f"{ext_id}: {_string(ext.name)} {{")
+        for index, (name, kind, description, _) in enumerate(l0_systems(snapshot, self.config)):
+            ext_id = f"ext_{index}_{_id(name)}"
+            shape = "cylinder" if kind in STORES else "rectangle"
+            lines.append(f"{ext_id}: {_string(name)} {{")
             lines.append(f"  shape: {shape}")
             lines.append('  style.fill: "#64748b"')
             lines.append('  style.stroke: "#94a3b8"')
             lines.append('  style.font-color: "#ffffff"')
-            if ext.description:
-                lines.append(f"  tooltip: {_tooltip(ext.description)}")
+            if description:
+                lines.append(f"  tooltip: {_tooltip(description)}")
             lines.append("}")
             lines.append(f"{sys_id} -> {ext_id}")
             lines.append("")

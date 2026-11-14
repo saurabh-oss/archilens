@@ -456,8 +456,15 @@ def create_mcp_server(host: str = "127.0.0.1", port: int = 8766) -> FastMCP:
                 lines.append("## External Systems")
                 for ext in _config.external_systems:
                     lines.append(f"  - {ext.name} ({ext.type}): {ext.description}")
-            else:
-                lines.append("No external systems configured.")
+            if snap.detected_systems:
+                lines.append("## External Systems (detected from imports)")
+                for system in snap.detected_systems:
+                    lines.append(
+                        f"  - {system.name} ({system.type}): {system.used_by()}; "
+                        f"imported as {', '.join(system.packages)}"
+                    )
+            if not (_config and _config.external_systems) and not snap.detected_systems:
+                lines.append("No external systems configured or detected.")
             if snap.detected_patterns:
                 lines.append("")
                 lines.append("## Detected Patterns")

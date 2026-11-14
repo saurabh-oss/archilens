@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import re
 
-from archilens.generators.base import DiagramGenerator, omitted_note, select_l1_edges, stroke_width
+from archilens.generators.base import STORES, DiagramGenerator, l0_systems, omitted_note, select_l1_edges, stroke_width
 from archilens.models import (
     ArchSnapshot,
     EdgeType,
@@ -55,13 +55,12 @@ class PlantUMLGenerator(DiagramGenerator):
         lines.append(f'rectangle "{_text(snapshot.project_name)}" as {sys_id} #1168bd')
         lines.append("")
 
-        for ext in self.config.external_systems:
-            ext_id = _safe_id(ext.name)
-            if ext.type in ("database", "cache"):
-                lines.append(f'database "{_text(ext.name)}" as {ext_id} #64748b')
+        for name, kind, desc, _ in l0_systems(snapshot, self.config):
+            ext_id = _safe_id(name)
+            if kind in STORES:
+                lines.append(f'database "{_text(name)}" as {ext_id} #64748b')
             else:
-                lines.append(f'rectangle "{_text(ext.name)}" as {ext_id} #64748b')
-            desc = ext.description
+                lines.append(f'rectangle "{_text(name)}" as {ext_id} #64748b')
             if desc:
                 lines.append(f"note right of {ext_id}: {_text(desc)}")
             lines.append(f"{sys_id} --> {ext_id}")
