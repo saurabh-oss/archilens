@@ -111,6 +111,11 @@ class ArchNode(BaseModel):
     # Children for drill-down (populated at finer levels)
     children: list[str] = Field(default_factory=list)
 
+    #: What the component declares: the top-level functions of a file of functions
+    #: (``NodeType.FUNCTION``) or of a Vue/Svelte component's script. The public ones, or all
+    #: of them when none is public.
+    members: list[str] = Field(default_factory=list)
+
     # Parent node ID (for upward navigation)
     parent: str | None = None
 

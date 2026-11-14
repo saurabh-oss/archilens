@@ -10,7 +10,7 @@ result as the PR comment.
 from __future__ import annotations
 
 from archilens.config import CIRule
-from archilens.models import ArchDiff, ArchNode, ArchSnapshot, DiffEntry, EdgeType, NodeType
+from archilens.models import ArchDiff, ArchEdge, ArchNode, ArchSnapshot, DiffEntry, EdgeType, NodeType
 from archilens.rules import evaluate_rules
 
 _MODULE = "module:"
@@ -106,8 +106,9 @@ def compute_diff(base: ArchSnapshot, head: ArchSnapshot) -> ArchDiff:
             )
 
     # --- Edge diff ---
-    base_edge_keys = {(e.source, e.target, e.edge_type) for e in base.edges}
-    head_edge_keys = {(e.source, e.target, e.edge_type) for e in head.edges}
+    base_edges, head_edges = _reported_edges(base), _reported_edges(head)
+    base_edge_keys = {(e.source, e.target, e.edge_type) for e in base_edges}
+    head_edge_keys = {(e.source, e.target, e.edge_type) for e in head_edges}
 
     for key in sorted(head_edge_keys - base_edge_keys, key=_edge_sort_key):
         src, tgt, etype = key
@@ -140,8 +141,8 @@ def compute_diff(base: ArchSnapshot, head: ArchSnapshot) -> ArchDiff:
         )
 
     # --- Modified edges (same key, changed weight — coupling increased/decreased) ---
-    base_edge_weights = {(e.source, e.target, e.edge_type): e.weight for e in base.edges}
-    head_edge_weights = {(e.source, e.target, e.edge_type): e.weight for e in head.edges}
+    base_edge_weights = {(e.source, e.target, e.edge_type): e.weight for e in base_edges}
+    head_edge_weights = {(e.source, e.target, e.edge_type): e.weight for e in head_edges}
 
     for key in sorted(base_edge_keys & head_edge_keys, key=_edge_sort_key):
         bw = base_edge_weights[key]
@@ -244,7 +245,8 @@ def _match_moved_classes(removed: list[ArchNode], added: list[ArchNode]) -> tupl
     def by_name(nodes: list[ArchNode]) -> dict[tuple[str, str], list[ArchNode]]:
         groups: dict[tuple[str, str], list[ArchNode]] = {}
         for node in nodes:
-            if node.node_type != NodeType.MODULE and node.file_path:
+            # A file of functions is named after its file, so it has no name to follow to a new one.
+            if node.node_type not in (NodeType.MODULE, NodeType.FUNCTION) and node.file_path:
                 groups.setdefault((node.node_type.value, node.name), []).append(node)
         return groups
 
@@ -273,10 +275,21 @@ def _kind(system_type: str) -> str:
     return "external API" if system_type == "external_api" else system_type
 
 
+def _reported_edges(snapshot: ArchSnapshot) -> list[ArchEdge]:
+    """
+    The relationships a diff reports: everything except imports between the files of one
+    module. Those are what the L2 diagram draws; a pull request that adds one has not changed
+    which modules depend on which.
+    """
+    return [e for e in snapshot.edges if e.edge_type != EdgeType.DEPENDENCY or e.source.startswith(_MODULE)]
+
+
 def _describe(node: ArchNode) -> str:
     """Human label for a node in a diff entry, e.g. "module Orders" or "class Foo in app/orders"."""
     if node.node_type == NodeType.MODULE:
         return f"module {node.name}"
+    if node.node_type == NodeType.FUNCTION:
+        return f"file of functions {node.file_path}"
     where = f" in {node.parent.removeprefix('module:')}" if node.parent else ""
     return f"{node.node_type.value} {node.name}{where}"
 

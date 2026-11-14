@@ -149,12 +149,28 @@ _FUNCTION_QUERIES: dict[str, str] = {
     "python": """
         (function_definition name: (identifier) @func_name)
     """,
+    # `const f = () => {}` and `exports.f = function () {}` declare a function as much as
+    # `function f() {}` does; modern and CommonJS code is mostly written that way.
     "javascript": """
         [ (function_declaration name: (identifier) @func_name)
+          (generator_function_declaration name: (identifier) @func_name)
+          (variable_declarator
+            name: (identifier) @func_name
+            value: [(arrow_function) (function_expression)])
+          (assignment_expression
+            left: (member_expression property: (property_identifier) @func_name)
+            right: [(arrow_function) (function_expression)])
           (method_definition name: (property_identifier) @func_name) ]
     """,
     "typescript": """
         [ (function_declaration name: (identifier) @func_name)
+          (generator_function_declaration name: (identifier) @func_name)
+          (variable_declarator
+            name: (identifier) @func_name
+            value: [(arrow_function) (function_expression)])
+          (assignment_expression
+            left: (member_expression property: (property_identifier) @func_name)
+            right: [(arrow_function) (function_expression)])
           (method_definition name: (property_identifier) @func_name)
           (method_signature name: (property_identifier) @func_name) ]
     """,
@@ -197,6 +213,8 @@ class TSClass:
 class TSFunction:
     name: str
     line: int
+    #: Declared at the top of the file: not a method, and not nested in another function
+    top_level: bool = False
 
 
 @dataclass
@@ -294,11 +312,13 @@ def extract_from_file(
                 # Skip dunder methods
                 if name.startswith("__") and name.endswith("__"):
                     continue
+                if name == "exports":  # `module.exports = function () {}` names nothing
+                    continue
                 line = node.start_point[0] + 1
                 key = (name, line)
                 if key not in seen_fn:
                     seen_fn.add(key)
-                    result.functions.append(TSFunction(name=name, line=line))
+                    result.functions.append(TSFunction(name=name, line=line, top_level=_is_top_level(node)))
         except Exception as exc:
             logger.debug("Function query failed for %s (%s): %s", file_path, language, exc)
 
@@ -385,6 +405,51 @@ def _query_matches(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+#: Node types a function can be declared inside without being a function of the file itself.
+_ENCLOSING_SCOPES = frozenset(
+    {
+        # Python
+        "function_definition",
+        "class_definition",
+        "lambda",
+        # JavaScript / TypeScript
+        "function_declaration",
+        "generator_function_declaration",
+        "function_expression",
+        "generator_function",
+        "arrow_function",
+        "method_definition",
+        "class_declaration",
+        "class",
+        "abstract_class_declaration",
+        "interface_declaration",
+        "object",
+        "object_type",
+        # Go: a method has a receiver, so it belongs to a type
+        "method_declaration",
+        # Java has no functions outside a class
+        "class_body",
+        "interface_body",
+        "enum_body",
+    }
+)
+
+
+def _is_top_level(name_node: Any) -> bool:
+    """True when the function named by *name_node* is declared at the top of its file."""
+    definition = name_node.parent
+    if definition is None or definition.type in ("method_definition", "method_signature", "method_declaration"):
+        return False
+    if definition.type == "member_expression":  # `exports.f = function () {}`
+        definition = definition.parent
+    node = definition.parent if definition is not None else None
+    while node is not None:
+        if node.type in _ENCLOSING_SCOPES:
+            return False
+        node = node.parent
+    return True
 
 
 def _node_text(node: Any, source_bytes: bytes) -> str:

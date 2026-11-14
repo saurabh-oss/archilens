@@ -36,6 +36,7 @@ diagrams:
   output_dir: ".archilens/diagrams"
   format: "mermaid"  # mermaid | d2 | plantuml
   l1_max_edges: 40  # most dependencies drawn on L1, heaviest first; 0 draws all
+  l2_max_components: 60  # most components drawn on one L2, most connected first; 0 draws all
   levels:
     - level: 0  # System Context: your system as a black box with external actors
       name: "System Context"
@@ -43,7 +44,7 @@ diagrams:
     - level: 1  # Module Architecture: modules and the dependencies between them
       name: "Module Architecture"
       enabled: true
-    - level: 2  # Component Detail: classes and functions inside each module
+    - level: 2  # Component Detail: classes, files of functions and their imports inside each module
       name: "Component Detail"
       enabled: true
       modules: []  # module paths to drill into; all if empty

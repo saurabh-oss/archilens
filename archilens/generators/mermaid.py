@@ -19,11 +19,16 @@ from pathlib import Path
 from archilens.config import ArchiLensConfig
 from archilens.generators.base import (
     L1_MAX_EDGES,
+    L2_MAX_COMPONENTS,
     STORES,
     DiagramGenerator,
+    component_kind,
     l0_systems,
+    l2_note,
+    member_names,
     omitted_note,
     select_l1_edges,
+    select_l2,
     shorten,
     stroke_width,
 )
@@ -47,7 +52,7 @@ class MermaidGenerator(DiagramGenerator):
         return generate_module_architecture(snapshot, self.config.diagrams.l1_max_edges)
 
     def component_detail(self, snapshot: ArchSnapshot, module_id: str) -> str | None:
-        return generate_component_detail(snapshot, module_id)
+        return generate_component_detail(snapshot, module_id, self.config.diagrams.l2_max_components)
 
     def process_flow(self, flow: ProcessFlow) -> str:
         return generate_process_flow(flow)
@@ -261,18 +266,20 @@ def generate_module_architecture(snapshot: ArchSnapshot, max_edges: int = L1_MAX
 def generate_component_detail(
     snapshot: ArchSnapshot,
     module_id: str,
+    max_components: int = L2_MAX_COMPONENTS,
 ) -> str | None:
-    """Generate L2 Component Detail diagram for a specific module."""
-    children = snapshot.get_children(module_id)
+    """
+    Generate L2 Component Detail diagram for a specific module: its classes and its files of
+    functions, with inheritance and the imports between them. At most *max_components* boxes
+    are drawn (0 = all); the table under the diagram lists the rest.
+    """
+    children, edges, everything = select_l2(snapshot, module_id, max_components)
     if not children:
         return None
 
     module_node = next((n for n in snapshot.nodes if n.id == module_id), None)
     if not module_node:
         return None
-
-    child_ids = {c.id for c in children}
-    edges = [e for e in snapshot.edges if e.source in child_ids or e.target in child_ids]
 
     lines = [
         f"# L2: Component Detail — {module_node.name}",
@@ -289,11 +296,18 @@ def generate_component_detail(
         lines.append(f'    class {cid}["{escape_label(child.name)}"] {{')
         if child.node_type == NodeType.INTERFACE:
             lines.append("        <<interface>>")
+        elif child.node_type == NodeType.FUNCTION:
+            lines.append("        <<functions>>")
         if child.file_path:
-            lines.append(f"        +{child.file_path}")
+            lines.append(f"        +{_member_text(child.file_path)}")
+        names, listed = member_names(child)
+        if listed:
+            lines.append(f"        {listed}")
+        lines += [f"        +{_member_text(name)}()" for name in names]
         lines.append("    }")
 
     # Relationships
+    imports = 0
     for edge in edges:
         if edge.source in class_id and edge.target in class_id:
             src_name, tgt_name = class_id[edge.source], class_id[edge.target]
@@ -304,10 +318,28 @@ def generate_component_detail(
                 lines.append(f"    {tgt_name} <|.. {src_name}")
             elif edge.edge_type == EdgeType.COMPOSITION:
                 lines.append(f"    {src_name} *-- {tgt_name}")
+            elif edge.edge_type == EdgeType.DEPENDENCY:
+                lines.append(f"    {src_name} ..> {tgt_name}")
+                imports += 1
             else:
                 lines.append(f"    {src_name} --> {tgt_name} : {escape_label(edge.label or 'uses')}")
 
     lines.append("```")
+
+    notes = []
+    if imports:
+        notes.append("A dashed arrow is an import: the file it starts from imports the file it points to.")
+    note = l2_note(len(children), len(everything))
+    if note:
+        notes.append(note + ".")
+    if notes:
+        lines += ["", f"<sub>{' '.join(notes)}</sub>"]
+    if note:
+        lines += ["", f"<details><summary>All {len(everything)} components</summary>", ""]
+        lines += ["| Component | Kind | File |", "|-----------|------|------|"]
+        for child in everything:
+            lines.append(f"| {_cell(child.name)} | {component_kind(child)} | {_cell(child.file_path or '')} |")
+        lines += ["", "</details>"]
     return "\n".join(lines)
 
 
@@ -383,6 +415,18 @@ def escape_label(text: str) -> str:
         .replace("<", "#lt;")
         .replace(">", "#gt;")
     )
+
+
+def _member_text(text: str) -> str:
+    """
+    Text for one line inside a class box. Mermaid reads a line containing brackets as a
+    method and braces as the end of the class, so a path such as ``routes/(app)/[id].ts``
+    needs them as character codes.
+    """
+    text = " ".join(text.split()).replace("#", "#35;")
+    for char in '(){}~"<>':
+        text = text.replace(char, f"#{ord(char)};")
+    return text
 
 
 def _cell(text: str) -> str:

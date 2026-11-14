@@ -418,7 +418,7 @@ def history(repo: str, refs: str | None, use_tags: bool, max_refs: int, output: 
     table.add_column("Commit")
     table.add_column("Modules", justify="right")
     table.add_column("LOC", justify="right")
-    table.add_column("Classes", justify="right")
+    table.add_column("Components", justify="right")
     table.add_column("Dependencies", justify="right")
     table.add_column("Patterns")
 

@@ -23,8 +23,11 @@ from archilens.generators.base import (
     STORES,
     DiagramGenerator,
     l0_systems,
+    l2_note,
+    member_names,
     omitted_note,
     select_l1_edges,
+    select_l2,
     shorten,
     stroke_width,
 )
@@ -157,7 +160,7 @@ class D2Generator(DiagramGenerator):
     # -------------------------------------------------------------------
 
     def component_detail(self, snapshot: ArchSnapshot, module_id: str) -> str | None:
-        children = snapshot.get_children(module_id)
+        children, edges, everything = select_l2(snapshot, module_id, self.config.diagrams.l2_max_components)
         if not children:
             return None
 
@@ -165,15 +168,12 @@ class D2Generator(DiagramGenerator):
         if not module_node:
             return None
 
-        child_ids = {c.id for c in children}
-        edges = [e for e in snapshot.edges if e.source in child_ids and e.target in child_ids]
-
         container = "module"
-        lines: list[str] = [
-            f"# L2 Component Detail: {_comment(module_node.name)}",
-            "",
-            f"{container}: {_string(module_node.name)} {{",
-        ]
+        lines: list[str] = [f"# L2 Component Detail: {_comment(module_node.name)}"]
+        note = l2_note(len(children), len(everything))
+        if note:
+            lines.append(f"# {note}")
+        lines += ["", f"{container}: {_string(module_node.name)} {{"]
 
         paths: dict[str, str] = {}
         for index, child in enumerate(children):
@@ -183,6 +183,10 @@ class D2Generator(DiagramGenerator):
             label = f"«interface» {child.name}" if interface else child.name
             if child.file_path:
                 label += f"\n{child.file_path}"
+            names, listed = member_names(child)  # the functions of a file of functions
+            if listed:
+                label += f"\n{listed}"
+            label += "".join(f"\n{name}()" for name in names)
             lines.append(f"  {cid}: {_string(label)} {{")
             if interface:
                 lines.append("    style.stroke-dash: 3")
@@ -269,8 +273,11 @@ def _id(raw: str) -> str:
 
 
 def _string(text: str) -> str:
-    """Render text as a D2 double-quoted string; newlines become ``\\n`` line breaks."""
-    escaped = text.replace("\\", "\\\\").replace('"', '\\"')
+    """
+    Render text as a D2 double-quoted string; newlines become ``\\n`` line breaks. ``$`` starts
+    a substitution in D2, and JavaScript names may contain one, so it is escaped too.
+    """
+    escaped = text.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$")
     return '"' + "\\n".join(" ".join(part.split()) for part in escaped.split("\n")) + '"'
 
 

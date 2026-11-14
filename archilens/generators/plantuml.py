@@ -14,7 +14,17 @@ from __future__ import annotations
 
 import re
 
-from archilens.generators.base import STORES, DiagramGenerator, l0_systems, omitted_note, select_l1_edges, stroke_width
+from archilens.generators.base import (
+    STORES,
+    DiagramGenerator,
+    l0_systems,
+    l2_note,
+    member_names,
+    omitted_note,
+    select_l1_edges,
+    select_l2,
+    stroke_width,
+)
 from archilens.models import (
     ArchSnapshot,
     EdgeType,
@@ -174,16 +184,13 @@ class PlantUMLGenerator(DiagramGenerator):
     # -------------------------------------------------------------------
 
     def component_detail(self, snapshot: ArchSnapshot, module_id: str) -> str | None:
-        children = snapshot.get_children(module_id)
+        children, edges, everything = select_l2(snapshot, module_id, self.config.diagrams.l2_max_components)
         if not children:
             return None
 
         module_node = next((n for n in snapshot.nodes if n.id == module_id), None)
         if not module_node:
             return None
-
-        child_ids = {c.id for c in children}
-        edges = [e for e in snapshot.edges if e.source in child_ids or e.target in child_ids]
 
         lines: list[str] = [
             f"@startuml L2_{_safe_id(module_node.name)}_Components",
@@ -192,13 +199,25 @@ class PlantUMLGenerator(DiagramGenerator):
             f"title L2 Component Detail — {_text(module_node.name)}",
             "",
         ]
+        note = l2_note(len(children), len(everything))
+        if note:
+            lines += [f"' {note}", ""]
 
         for child in children:
             cid = _safe_id(child.id)
             if child.node_type == NodeType.INTERFACE:
                 lines.append(f'interface "{_text(child.name)}" as {cid}')
             else:
-                lines.append(f'class "{_text(child.name)}" as {cid}')
+                stereotype = " <<functions>>" if child.node_type == NodeType.FUNCTION else ""
+                names, listed = member_names(child)  # the functions of a file of functions
+                if names:
+                    lines.append(f'class "{_text(child.name)}" as {cid}{stereotype} {{')
+                    if listed:
+                        lines.append(f"  {listed}")
+                    lines += [f"  +{_text(name)}()" for name in names]
+                    lines.append("}")
+                else:
+                    lines.append(f'class "{_text(child.name)}" as {cid}{stereotype}')
                 if child.file_path:
                     lines.append(f"note bottom of {cid}: {child.file_path}")
 
@@ -216,6 +235,8 @@ class PlantUMLGenerator(DiagramGenerator):
                     lines.append(f"{tgt} <|.. {src}")
                 elif edge.edge_type == EdgeType.COMPOSITION:
                     lines.append(f"{src} *-- {tgt}")
+                elif edge.edge_type == EdgeType.DEPENDENCY:
+                    lines.append(f"{src} ..> {tgt} : imports")
                 else:
                     label = edge.label or "uses"
                     lines.append(f"{src} --> {tgt} : {label}")

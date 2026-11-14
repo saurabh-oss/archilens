@@ -14,7 +14,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 from archilens.config import ArchiLensConfig
-from archilens.models import ArchEdge, ArchSnapshot, ProcessFlow
+from archilens.models import ArchEdge, ArchNode, ArchSnapshot, NodeType, ProcessFlow
 
 
 class DiagramGenerator(ABC):
@@ -200,6 +200,67 @@ def omitted_note(shown: int, total: int) -> str:
         f"Showing {shown} of {total} dependencies: the heaviest, and at least one for every module. "
         "Set diagrams.l1_max_edges: 0 to draw all"
     )
+
+
+#: Most components drawn on one L2 diagram by default. Past this nobody can read it, and a
+#: few hundred boxes exceed what Mermaid will render at all (Django's ``db`` has 600).
+#: ``diagrams.l2_max_components`` overrides it, and 0 draws all of them.
+L2_MAX_COMPONENTS = 60
+
+#: Most functions listed in one component's box.
+MAX_MEMBERS = 8
+
+
+def select_l2(
+    snapshot: ArchSnapshot, module_id: str, limit: int = L2_MAX_COMPONENTS
+) -> tuple[list[ArchNode], list[ArchEdge], list[ArchNode]]:
+    """
+    What one module's L2 diagram draws: (components, relationships between them, every
+    component of the module). All of them up to *limit*; beyond that, the ones with the
+    most relationships inside the module, kept in their original order.
+    """
+    everything = snapshot.get_children(module_id)
+    ids = {c.id for c in everything}
+    edges = [e for e in snapshot.edges if e.source in ids and e.target in ids]
+    if limit <= 0 or len(everything) <= limit:
+        return everything, edges, everything
+    degree = dict.fromkeys(ids, 0)
+    for edge in edges:
+        degree[edge.source] += 1
+        degree[edge.target] += 1
+    position = {c.id: i for i, c in enumerate(everything)}
+    kept = {c.id for c in sorted(everything, key=lambda c: (-degree[c.id], position[c.id]))[:limit]}
+    return (
+        [c for c in everything if c.id in kept],
+        [e for e in edges if e.source in kept and e.target in kept],
+        everything,
+    )
+
+
+def l2_note(shown: int, total: int) -> str:
+    """'' when every component is drawn, else what the reader is not seeing."""
+    if shown >= total:
+        return ""
+    return (
+        f"Showing {shown} of {total} components: the ones with the most relationships inside the module. "
+        "Set diagrams.l2_max_components: 0 to draw all"
+    )
+
+
+def member_names(node: ArchNode) -> tuple[list[str], str]:
+    """
+    The functions to list in a component's box, and a line saying so when that is not all of
+    them ("12 functions, 8 listed"; '' otherwise). One function over the limit is just listed.
+    """
+    total = len(node.members)
+    if total <= MAX_MEMBERS + 1:
+        return node.members, ""
+    return node.members[:MAX_MEMBERS], f"{total} functions, {MAX_MEMBERS} listed"
+
+
+def component_kind(node: ArchNode) -> str:
+    """ "class", "interface", "component", or "functions" for a file of functions."""
+    return "functions" if node.node_type == NodeType.FUNCTION else node.node_type.value
 
 
 def l0_systems(snapshot: ArchSnapshot, config: ArchiLensConfig) -> list[tuple[str, str, str, str]]:

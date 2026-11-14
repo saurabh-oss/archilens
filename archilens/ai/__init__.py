@@ -29,6 +29,7 @@ from archilens.models import (
     ArchSnapshot,
     DiffReview,
     FlowStep,
+    NodeType,
     ProcessFlow,
 )
 
@@ -658,7 +659,10 @@ def generate_module_summaries(
 
     def _summarize_one(node: ArchNode) -> tuple[str, dict[str, str] | None]:
         children = snapshot.get_children(node.id)
-        symbols = ", ".join(c.name for c in children[:20])
+        # Classes only: a file of functions is named after its file, and the outline below
+        # already lists the functions themselves.
+        classes = [c.name for c in children if c.node_type != NodeType.FUNCTION]
+        symbols = ", ".join(classes[:20])
         deps = [e.target.replace("module:", "") for e in snapshot.edges if e.source == node.id]
 
         prompt = MODULE_SUMMARY_PROMPT.format(

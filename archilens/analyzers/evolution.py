@@ -51,7 +51,7 @@ class RefSnapshot:
     ref: str
     timestamp: str
     module_count: int
-    node_count: int  # modules + classes
+    node_count: int  # modules + components (classes and files of functions)
     edge_count: int  # module dependencies
     total_loc: int
     modules: dict[str, int] = field(default_factory=dict)  # module path -> LOC
@@ -244,7 +244,7 @@ def generate_evolution_report(timeline: EvolutionTimeline) -> str:
         f"| Metric | {first.ref} | {last.ref} | Change |",
         "|--------|--------|----|--------|",
         f"| Modules | {first.module_count} | {last.module_count} | {'+' if mod_delta >= 0 else ''}{mod_delta} |",
-        f"| Modules + classes | {first.node_count} | {last.node_count} | {'+' if last.node_count - first.node_count >= 0 else ''}{last.node_count - first.node_count} |",
+        f"| Modules + components | {first.node_count} | {last.node_count} | {'+' if last.node_count - first.node_count >= 0 else ''}{last.node_count - first.node_count} |",
         f"| Module dependencies | {first.edge_count} | {last.edge_count} | {'+' if last.edge_count - first.edge_count >= 0 else ''}{last.edge_count - first.edge_count} |",
         f"| Total LOC | {first.total_loc:,} | {last.total_loc:,} | {sign}{loc_delta:,} |",
         "",
@@ -288,7 +288,7 @@ def generate_evolution_report(timeline: EvolutionTimeline) -> str:
             parts.append(f"*{snap.commit_message[:100]}*")
         parts.append("")
         parts.append(f"- **Modules:** {snap.module_count}")
-        parts.append(f"- **Source files:** {snap.file_count}  |  **Modules + classes:** {snap.node_count}")
+        parts.append(f"- **Source files:** {snap.file_count}  |  **Modules + components:** {snap.node_count}")
         parts.append(f"- **Module dependencies:** {snap.edge_count}")
         parts.append(f"- **Total LOC:** {snap.total_loc:,}")
         if snap.patterns:
@@ -345,7 +345,7 @@ def _analyse_ref(repo: Any, repo_path: Path, ref: str, config: ArchiLensConfig) 
     dependencies = sorted(
         (e.source.removeprefix("module:"), e.target.removeprefix("module:"))
         for e in edges
-        if e.edge_type == EdgeType.DEPENDENCY
+        if e.edge_type == EdgeType.DEPENDENCY and e.source.startswith("module:")  # not imports within a module
     )
 
     return RefSnapshot(
@@ -521,7 +521,7 @@ def _metrics_table(timeline: EvolutionTimeline) -> list[str]:
     lines: list[str] = [
         "## Metrics Per Ref",
         "",
-        "| Ref | Commit | Modules | LOC | Modules + classes | Dependencies | Patterns |",
+        "| Ref | Commit | Modules | LOC | Modules + components | Dependencies | Patterns |",
         "|-----|--------|---------|-----|-------|-------|----------|",
     ]
     for snap in timeline.refs:

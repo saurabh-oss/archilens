@@ -32,7 +32,7 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from archilens.models import EdgeType
+from archilens.models import EdgeType, NodeType
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
@@ -495,7 +495,10 @@ def create_mcp_server(host: str = "127.0.0.1", port: int = 8766) -> FastMCP:
             lines.append("")
             lines.append("## Classes / Components")
             for child in children[:40]:
-                lines.append(f"  - {child.name} ({child.node_type.value})")
+                if child.node_type == NodeType.FUNCTION:  # a file of functions
+                    lines.append(f"  - {child.file_path} (functions): {', '.join(child.members[:12])}")
+                else:
+                    lines.append(f"  - {child.name} ({child.node_type.value})")
             if len(children) > 40:
                 lines.append(f"  ... and {len(children) - 40} more")
 
@@ -515,9 +518,11 @@ def create_mcp_server(host: str = "127.0.0.1", port: int = 8766) -> FastMCP:
 
         else:  # L1 (default)
             modules = snap.get_module_nodes()
+            # Module-to-module only: snap.edges also holds inheritance and imports within a module.
+            module_edges = [e for e in snap.edges if e.source.startswith("module:")]
             lines.append(f"# {snap.project_name} — Module Architecture (L1)")
             lines.append(
-                f"Summary: {len(modules)} modules, {len(snap.edges)} edges, "
+                f"Summary: {len(modules)} modules, {len(module_edges)} edges, "
                 f"{sum(n.lines_of_code for n in modules):,} total LOC"
             )
             lines.append("")
@@ -535,7 +540,7 @@ def create_mcp_server(host: str = "127.0.0.1", port: int = 8766) -> FastMCP:
                 cap = f" [{node.capability}]" if node.capability else ""
                 lines.append(f"  {node.name}{cap} — {node.lines_of_code:,} LOC, {dep_count} outgoing deps")
 
-            top_edges = sorted(snap.edges, key=lambda e: e.weight, reverse=True)[:12]
+            top_edges = sorted(module_edges, key=lambda e: e.weight, reverse=True)[:12]
             if top_edges:
                 lines.append("")
                 lines.append("## Key Dependencies (by import frequency)")
