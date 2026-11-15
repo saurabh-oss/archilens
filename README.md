@@ -215,6 +215,7 @@ The `.archilens.yml` file controls all analysis behaviour.
 Working examples for well-known projects live in [`docs/configs/`](docs/configs/):
 [`spring.yml`](docs/configs/spring.yml), written against spring-petclinic, and
 [`django.yml`](docs/configs/django.yml), written against django/django. Each shows one way to name
+[`nestjs.yml`](docs/configs/nestjs.yml), written against nestjs/nest
 capabilities and rules for a real codebase.
 
 ### Project
