@@ -1,0 +1,124 @@
+# =============================================================================
+# ArchiLens example config — NestJS
+# =============================================================================
+
+
+# Written for nestjs/nest (https://github.com/nestjs/nest) at commit
+# 4410584e4ebd1cc6203fe3af0a994e6fd1399648 (master), with ArchiLens 0.18.1.
+#
+# To try it: copy this file to the root of a nest checkout as
+# `.archilens.yml`, then run from that root:
+#
+#     archilens analyze --repo <clone>
+#     archilens check   --repo <clone>
+#
+# Nest is a TypeScript monorepo of npm packages under packages/ (each
+# workspace package is one module). The modules below are what
+# `archilens init` finds in that repo:
+#
+#   - packages/common             (206 files)
+#   - packages/core               (206 files)
+#   - packages/microservices      (148 files)
+#   - packages/websockets         ( 46 files)
+#   - packages/platform-fastify   ( 43 files)
+#   - packages/platform-node      ( 33 files)
+#   - packages/platform-express   ( 26 files)
+#   - packages/testing            ( 13 files)
+#   - packages/platform-socket.io (  5 files)
+#   - packages/platform-ws        (  4 files)
+#
+# The repo root only holds gulpfile.mjs (build tooling), so it is excluded.
+
+# Expected result: no failures, and one "acyclic-modules" warning (see below).
+
+# External systems (Kafka, MQTT, NATS, RabbitMQ, Redis, ...) are detected from
+# the dynamic imports in packages/microservices; no external_systems needed.
+
+project:
+  name: "NestJS"
+  description: "A progressive Node.js framework for building efficient, scalable server-side applications"
+  type: "library"
+
+analysis:
+  exclude:
+    - "gulpfile.mjs"
+
+capabilities:
+  - name: "Framework core"
+    description: "Shared decorators and utilities (common) plus the dependency-injection container and application lifecycle (core)"
+    modules:
+      - "packages/common/**"
+      - "packages/core/**"
+
+  - name: "Transports"
+    description: "Microservice transports and WebSocket gateways"
+    modules:
+      - "packages/microservices/**"
+      - "packages/websockets/**"
+
+  - name: "HTTP platforms"
+    description: "Adapters that plug an HTTP server into the core"
+    modules:
+      - "packages/platform-express/**"
+      - "packages/platform-fastify/**"
+      - "packages/platform-node/**"
+
+  - name: "WebSocket platforms"
+    description: "Adapters for the WebSocket gateway (socket.io and ws)"
+    modules:
+      - "packages/platform-socket.io/**"
+      - "packages/platform-ws/**"
+
+  - name: "Testing"
+    description: "Utilities for testing Nest applications"
+    modules:
+      - "packages/testing/**"
+
+ci:
+  fail_on: "new"
+  rules:
+    # common holds the decorators and interfaces every other package imports,
+    # so it must stay a leaf: if it depended on another package, the
+    # dependency would become circular for everyone.
+    - name: "common-independent-of-core"
+      type: "forbidden-dependency"
+      from: "packages/common/**"
+      to: "packages/core/**"
+      action: "fail"
+
+    - name: "common-independent-of-microservices"
+      type: "forbidden-dependency"
+      from: "packages/common/**"
+      to: "packages/microservices/**"
+      action: "fail"
+
+    # Platform adapters are interchangeable: an app picks one, so one
+    # adapter must never pull in another.
+    - name: "express-independent-of-fastify"
+      type: "forbidden-dependency"
+      from: "packages/platform-express/**"
+      to: "packages/platform-fastify/**"
+      action: "fail"
+
+    - name: "fastify-independent-of-express"
+      type: "forbidden-dependency"
+      from: "packages/platform-fastify/**"
+      to: "packages/platform-express/**"
+      action: "fail"
+
+    # testing is a consumer of the framework; nothing in the framework
+    # should depend on it.
+    - name: "core-independent-of-testing"
+      type: "forbidden-dependency"
+      from: "packages/core/**"
+      to: "packages/testing/**"
+      action: "fail"
+
+    # core loads the platform adapters, microservices, websockets and testing
+    # at run time with import('@nestjs/...') (NestFactory picks
+    # platform-express as the default adapter), and those packages depend on
+    # core in turn. This is by design, so it is reported as a warning, not a
+    # failure.
+    - name: "acyclic-modules"
+      type: "no-cycles"
+      action: "warn"
