@@ -106,14 +106,16 @@ _IMPORT_QUERIES: dict[str, str] = {
           (export_statement source: (string)) @stmt
           (call_expression
             function: (identifier) @_fn
-            (#eq? @_fn "require")) @stmt ]
+            (#eq? @_fn "require")) @stmt
+          (call_expression function: (import)) @stmt ]
     """,
     "typescript": """
         [ (import_statement) @stmt
           (export_statement source: (string)) @stmt
           (call_expression
             function: (identifier) @_fn
-            (#eq? @_fn "require")) @stmt ]
+            (#eq? @_fn "require")) @stmt
+          (call_expression function: (import)) @stmt ]
     """,
     "java": """
         (import_declaration) @stmt
@@ -462,6 +464,12 @@ def _node_text(node: Any, source_bytes: bytes) -> str:
 
 # Reuse the same pattern set as dependencies.py applied to tree-sitter-captured
 # import statement text (avoids false positives from comments / strings).
+
+#: ``import('./views/Home.vue')``: how Vue Router and React lazy routes, and code loading an
+#: optional package, name a module. A bundler comment may come before the path
+#: (``import(/* webpackChunkName: "home" */ './Home.vue')``). A template literal is skipped:
+#: its path isn't known until run time. ``obj.import('x')`` is a method, not an import.
+DYNAMIC_IMPORT = re.compile(r"""(?<![\w$.])import\s*\(\s*(?:/\*.*?\*/\s*)*['"]([^'"]+)['"]""", re.DOTALL)
 _IMPORT_PATTERNS: dict[str, list[re.Pattern[str]]] = {
     "python": [
         # "import a.b" is handled by _python_import_names (it may list several modules)
@@ -472,11 +480,13 @@ _IMPORT_PATTERNS: dict[str, list[re.Pattern[str]]] = {
         re.compile(r"""from\s+['"]([^'"]+)['"]"""),
         re.compile(r"""require\s*\(\s*['"]([^'"]+)['"]\s*\)"""),
         re.compile(r"""^\s*import\s+['"]([^'"]+)['"]""", re.MULTILINE),  # side-effect import
+        DYNAMIC_IMPORT,
     ],
     "typescript": [
         re.compile(r"""from\s+['"]([^'"]+)['"]"""),
         re.compile(r"""require\s*\(\s*['"]([^'"]+)['"]\s*\)"""),
         re.compile(r"""^\s*import\s+['"]([^'"]+)['"]""", re.MULTILINE),  # side-effect import
+        DYNAMIC_IMPORT,
     ],
     "java": [
         # "import static a.b.C.m;" and "import a.b.*;" both name a class or package
