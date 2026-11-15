@@ -9,6 +9,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.18.1] — 2026-11-15
+
+### Fixed
+- **Dynamic imports were ignored in JavaScript and TypeScript.** `import('./views/Home.vue')` is how
+  Vue Router and React lazy routes load their pages, so the router's dependency on every page was
+  missing. On vue-element-admin, 55 imports from the router to its views now count. Literal paths
+  are read, including after a bundler comment such as `/* webpackChunkName: "home" */`; a template
+  literal is skipped, since its path is known only at run time.
+- **Packages loaded on demand are external systems too.** NestJS loads its transports with
+  `() => import('kafkajs')`; with the config `init` writes, its L0 diagram went from no external
+  systems to Kafka, MQTT, NATS, RabbitMQ and Redis. The same imports add 7 real dependencies between
+  its packages, such as `core` loading `platform-express` as the default adapter.
+- **The external-system catalog knew NATS only by its old npm package.** NATS.js 3 ships as
+  `@nats-io/*` packages, which now count. MQTT brokers are new to the catalog (`mqtt`, `paho.mqtt`,
+  `aiomqtt`, Eclipse Paho for Java and Go).
+
+---
+
 ## [0.18.0] — 2026-11-14
 
 ### Added
@@ -634,7 +652,8 @@ pointing at generated files not in the repository).
 - GitHub Action composite workflow
 - `.archilens.yml` configuration schema
 
-[Unreleased]: https://github.com/saurabh-oss/archilens/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/saurabh-oss/archilens/compare/v0.18.1...HEAD
+[0.18.1]: https://github.com/saurabh-oss/archilens/compare/v0.18.0...v0.18.1
 [0.18.0]: https://github.com/saurabh-oss/archilens/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/saurabh-oss/archilens/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/saurabh-oss/archilens/compare/v0.15.1...v0.16.0

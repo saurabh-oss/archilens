@@ -42,7 +42,8 @@ capability. Corrections welcome — please open an issue.</sub>
 > - **Python**: flat and `src/` layouts, relative imports;
 > - **JavaScript and TypeScript**, including `.mjs`, `.cjs`, `.mts` and `.cts`: relative paths, `tsconfig`
 >   path aliases, npm/yarn/pnpm workspace packages, and the framework aliases `$lib` (SvelteKit) and
->   `@/`, `~/` (Vue CLI, Nuxt, Vite);
+>   `@/`, `~/` (Vue CLI, Nuxt, Vite). Dynamic `import('./views/Home.vue')` counts like a static import,
+>   so lazy routes in Vue Router and React are dependencies;
 > - **Vue and Svelte** single-file components, read through their `<script>` blocks; each file is also a
 >   component on the L2 diagram;
 > - **Java**: packages, wildcard and static imports;
@@ -508,7 +509,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # the diff needs the base commit
-      - uses: saurabh-oss/archilens@v0.18.0
+      - uses: saurabh-oss/archilens@v0.18.1
         with:
           fail-on-violations: "true"   # fail the job on rules with action: "fail"
           # Optional AI review in the PR comment, billed to your own key:
@@ -519,7 +520,7 @@ jobs:
 | Input | Default | Meaning |
 |---|---|---|
 | `repo-path` | `.` | Repository to analyse |
-| `install` | `archilens` | What to `pip install`: pin a release such as `archilens==0.18.0` (recommended) |
+| `install` | `archilens` | What to `pip install`: pin a release such as `archilens==0.18.1` (recommended) |
 | `enable-ai` | `false` | `"true"` opens the PR comment with an AI review. One request per push, plus one per entry-point file the PR adds (at most two). Needs `anthropic-api-key`; rule checks and `fail-on-violations` never use AI |
 | `ai-diagrams` | `false` | With `enable-ai`, `"true"` also adds AI module summaries, process flows and patterns to the uploaded diagrams: about one request per module on every run |
 | `anthropic-api-key` | — | Passed as `ANTHROPIC_API_KEY`. Store it as a secret in your own repository: usage is billed to your key, and GitHub doesn't pass secrets to PRs from forks |

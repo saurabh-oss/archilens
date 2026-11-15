@@ -20,7 +20,7 @@ from archilens.analyzers.discovery import LANGUAGE_NAMES, Module, SourceFile, _c
 from archilens.analyzers.embedded import SCRIPT_HOSTS, script_source
 from archilens.analyzers.layout import ROOT_MODULE
 from archilens.analyzers.resolution import ImportResolver
-from archilens.analyzers.treesitter import TSExtractionResult, extract_from_file
+from archilens.analyzers.treesitter import DYNAMIC_IMPORT, TSExtractionResult, extract_from_file
 from archilens.models import (
     ArchEdge,
     ArchNode,
@@ -46,10 +46,12 @@ IMPORT_PATTERNS: dict[str, list[re.Pattern[str]]] = {
     "javascript": [
         re.compile(r"""import\s+.*?\s+from\s+['"]([^'"]+)['"]""", re.MULTILINE),
         re.compile(r"""require\s*\(\s*['"]([^'"]+)['"]\s*\)""", re.MULTILINE),
+        DYNAMIC_IMPORT,
     ],
     "typescript": [
         re.compile(r"""import\s+.*?\s+from\s+['"]([^'"]+)['"]""", re.MULTILINE),
         re.compile(r"""require\s*\(\s*['"]([^'"]+)['"]\s*\)""", re.MULTILINE),
+        DYNAMIC_IMPORT,
     ],
     "java": [
         re.compile(r"^\s*import\s+([\w.]+);", re.MULTILINE),

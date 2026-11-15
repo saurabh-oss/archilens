@@ -72,6 +72,7 @@ MEMCACHED = _sys("Memcached", "cache")
 KAFKA = _sys("Kafka", "queue")
 RABBITMQ = _sys("RabbitMQ", "queue")
 NATS = _sys("NATS", "queue")
+MQTT = _sys("MQTT broker", "queue")
 SQS = _sys("Amazon SQS", "queue", "aws")
 SNS = _sys("Amazon SNS", "queue", "aws")
 PUBSUB = _sys("Google Pub/Sub", "queue")
@@ -118,6 +119,7 @@ CATALOG: dict[str, dict[str, _System | None]] = {
         **dict.fromkeys(("kafka", "confluent_kafka", "aiokafka"), KAFKA),
         **dict.fromkeys(("pika", "aio_pika"), RABBITMQ),
         "nats": NATS,
+        **dict.fromkeys(("paho.mqtt", "aiomqtt"), MQTT),
         **dict.fromkeys(("boto3", "botocore", "aioboto3", "aiobotocore"), AWS),
         "google.cloud.storage": GCS,
         **dict.fromkeys(("google.cloud.pubsub", "google.cloud.pubsub_v1"), PUBSUB),
@@ -161,7 +163,8 @@ CATALOG: dict[str, dict[str, _System | None]] = {
         **dict.fromkeys(("memcached", "memjs"), MEMCACHED),
         **dict.fromkeys(("kafkajs", "node-rdkafka", "@confluentinc/kafka-javascript"), KAFKA),
         **dict.fromkeys(("amqplib", "amqp-connection-manager"), RABBITMQ),
-        "nats": NATS,
+        **dict.fromkeys(("nats", "@nats-io"), NATS),  # @nats-io/transport-node etc. since NATS.js 3
+        "mqtt": MQTT,
         "@aws-sdk/client-sqs": SQS,
         "@aws-sdk/client-sns": SNS,
         "@aws-sdk/client-s3": S3,
@@ -221,6 +224,7 @@ CATALOG: dict[str, dict[str, _System | None]] = {
         **dict.fromkeys(("org.apache.kafka", "org.springframework.kafka"), KAFKA),
         **dict.fromkeys(("com.rabbitmq", "org.springframework.amqp"), RABBITMQ),
         "io.nats": NATS,
+        "org.eclipse.paho": MQTT,
         **dict.fromkeys(("com.amazonaws.services.sqs", "software.amazon.awssdk.services.sqs"), SQS),
         **dict.fromkeys(("com.amazonaws.services.sns", "software.amazon.awssdk.services.sns"), SNS),
         **dict.fromkeys(("com.amazonaws.services.s3", "software.amazon.awssdk.services.s3"), S3),
@@ -279,6 +283,7 @@ CATALOG: dict[str, dict[str, _System | None]] = {
         ),  # fmt: skip
         **dict.fromkeys(("github.com/rabbitmq/amqp091-go", "github.com/streadway/amqp"), RABBITMQ),
         "github.com/nats-io/nats.go": NATS,
+        "github.com/eclipse/paho.mqtt.golang": MQTT,
         **dict.fromkeys(("github.com/aws/aws-sdk-go-v2/service/sqs", "github.com/aws/aws-sdk-go/service/sqs"), SQS),
         **dict.fromkeys(("github.com/aws/aws-sdk-go-v2/service/sns", "github.com/aws/aws-sdk-go/service/sns"), SNS),
         **dict.fromkeys(("github.com/aws/aws-sdk-go-v2/service/s3", "github.com/aws/aws-sdk-go/service/s3"), S3),
