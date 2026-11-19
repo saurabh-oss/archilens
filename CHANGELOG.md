@@ -9,6 +9,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.18.2] — 2026-11-20
+
+### Added
+- **`analysis.exclude_also`: leave out more without losing the defaults.** `analysis.exclude`
+  replaces the default list, so a config that set it to one pattern of its own analysed
+  `node_modules/`, `sample/` and everything else the defaults left out, and `archilens check` still
+  passed. A contributor's NestJS config hit this: 86 modules where its header described 10.
+  `exclude_also` adds to the defaults. `exclude` still replaces them, for analysing something the
+  defaults leave out.
+- [`docs/configs/nestjs.yml`](docs/configs/nestjs.yml), an example config written against
+  nestjs/nest, by Taranemp. It uses `exclude_also`.
+
+### Changed
+- The README's example config showed a three-line `exclude:` list, which demonstrated the mistake.
+  It shows `exclude_also` now, and the config `archilens init` writes says why its own list is
+  written out in full.
+- A pattern list given as one bare string (`exclude_also: "legacy/**"`) is read as one pattern.
+  It used to be read letter by letter.
+
+---
+
 ## [0.18.1] — 2026-11-15
 
 ### Fixed
@@ -652,7 +673,8 @@ pointing at generated files not in the repository).
 - GitHub Action composite workflow
 - `.archilens.yml` configuration schema
 
-[Unreleased]: https://github.com/saurabh-oss/archilens/compare/v0.18.1...HEAD
+[Unreleased]: https://github.com/saurabh-oss/archilens/compare/v0.18.2...HEAD
+[0.18.2]: https://github.com/saurabh-oss/archilens/compare/v0.18.1...v0.18.2
 [0.18.1]: https://github.com/saurabh-oss/archilens/compare/v0.18.0...v0.18.1
 [0.18.0]: https://github.com/saurabh-oss/archilens/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/saurabh-oss/archilens/compare/v0.16.0...v0.17.0

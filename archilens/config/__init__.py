@@ -53,12 +53,20 @@ class AnalysisConfig:
             "benchmark/**",
         ]
     )
+    #: Patterns left out in addition to ``exclude``. Setting ``exclude`` replaces the defaults
+    #: above, so a short list silently brings back node_modules, sample apps and the rest;
+    #: this key adds to them, which is what a config nearly always wants.
+    exclude_also: list[str] = field(default_factory=list)
     max_depth: int = 5  # reserved, not used yet
     #: Add external systems found in third-party imports to L0 (see analyzers.external)
     detect_external_systems: bool = True
     # Directory levels below a source root (src/, src/main/java, go.mod dir, ...)
     # that name an L1 module. JS/TS workspace packages are always one module each.
     module_depth: int = 2
+
+    def excluded(self) -> list[str]:
+        """Every pattern to leave out: ``exclude``, then ``exclude_also``."""
+        return [*self.exclude, *self.exclude_also]
 
 
 @dataclass
@@ -274,6 +282,13 @@ def _unless_null(value: Any, default: Any) -> Any:
     return default if value is None else value
 
 
+def _patterns(value: Any, default: list[str]) -> list[str]:
+    """A list of patterns from YAML: *default* when missing or null, and one pattern may be a bare string."""
+    if value is None:
+        return default
+    return [value] if isinstance(value, str) else [str(item) for item in value]
+
+
 def _parse_config(raw: dict[str, Any]) -> ArchiLensConfig:
     """Parse raw YAML dict into typed config."""
     # `or {}` / `or []`: a section whose contents are all commented out is YAML null.
@@ -291,7 +306,8 @@ def _parse_config(raw: dict[str, Any]) -> ArchiLensConfig:
         analysis=AnalysisConfig(
             languages=analysis_raw.get("languages") or [],
             entry_points=analysis_raw.get("entry_points") or [],
-            exclude=_unless_null(analysis_raw.get("exclude"), AnalysisConfig().exclude),
+            exclude=_patterns(analysis_raw.get("exclude"), AnalysisConfig().exclude),
+            exclude_also=_patterns(analysis_raw.get("exclude_also"), []),
             max_depth=analysis_raw.get("max_depth", 5),
             detect_external_systems=bool(_unless_null(analysis_raw.get("detect_external_systems"), True)),
             module_depth=_parse_module_depth(analysis_raw.get("module_depth", 2)),

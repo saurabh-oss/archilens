@@ -239,10 +239,9 @@ analysis:
     - pattern: "**/routes/**/*.ts"
       type: "http_handler"
 
-  exclude:
-    - "**/node_modules/**"
-    - "**/__pycache__/**"
-    - "**/venv/**"
+  exclude_also:     # left out in addition to the defaults
+    - "integration/**"
+    - "legacy/**"
 
   module_depth: 2   # directory levels below a source root that name a module
 ```
@@ -271,7 +270,13 @@ by default: they would otherwise crowd the module diagram (Express ships 26 exam
 library). Only the root counts, so a Java package such as `com/example/demo` is analysed as usual.
 `archilens init` also leaves out root `integration/`, `scripts/`, `tools/`, `fixtures/` and
 `playground/` folders it finds, with a comment on each line in the config it writes; delete a line to
-analyse that folder. Setting `analysis.exclude` replaces the default list.
+analyse that folder.
+
+**Leaving out more: use `exclude_also`.** It adds to the default list. `analysis.exclude` replaces the
+whole list, so a config that sets it to two patterns of its own analyses `node_modules/`, `sample/`
+and everything else the defaults left out, and `archilens check` still passes. Set `exclude` only to
+analyse something the defaults leave out, and repeat the defaults you still want; `archilens init`
+writes the list out in full for that reason.
 
 ### Business Capability Mapping
 
@@ -510,7 +515,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # the diff needs the base commit
-      - uses: saurabh-oss/archilens@v0.18.1
+      - uses: saurabh-oss/archilens@v0.18.2
         with:
           fail-on-violations: "true"   # fail the job on rules with action: "fail"
           # Optional AI review in the PR comment, billed to your own key:
@@ -521,7 +526,7 @@ jobs:
 | Input | Default | Meaning |
 |---|---|---|
 | `repo-path` | `.` | Repository to analyse |
-| `install` | `archilens` | What to `pip install`: pin a release such as `archilens==0.18.1` (recommended) |
+| `install` | `archilens` | What to `pip install`: pin a release such as `archilens==0.18.2` (recommended) |
 | `enable-ai` | `false` | `"true"` opens the PR comment with an AI review. One request per push, plus one per entry-point file the PR adds (at most two). Needs `anthropic-api-key`; rule checks and `fail-on-violations` never use AI |
 | `ai-diagrams` | `false` | With `enable-ai`, `"true"` also adds AI module summaries, process flows and patterns to the uploaded diagrams: about one request per module on every run |
 | `anthropic-api-key` | — | Passed as `ANTHROPIC_API_KEY`. Store it as a secret in your own repository: usage is billed to your key, and GitHub doesn't pass secrets to PRs from forks |

@@ -144,7 +144,7 @@ def discover_files(
         Tuple of (list of all source files, dict of module name -> Module)
     """
     repo_path = Path(repo_path).resolve()
-    exclude_patterns = config.analysis.exclude
+    exclude_patterns = config.analysis.excluded()
     allowed_languages = set(config.analysis.languages) if config.analysis.languages else None
 
     files: list[SourceFile] = []
@@ -196,14 +196,14 @@ def discover_files(
         if len(files) == _WARN_FILE_COUNT:
             logger.warning(
                 "Discovered %d source files — this is a large repo. "
-                "Analysis may be slow. Use 'analysis.exclude' in .archilens.yml "
+                "Analysis may be slow. Use 'analysis.exclude_also' in .archilens.yml "
                 "to narrow scope, or '--level 1' to skip component-level detail.",
                 _WARN_FILE_COUNT,
             )
         if len(files) >= _MAX_FILE_COUNT:
             logger.warning(
                 "Reached the %d file limit — stopping discovery. "
-                "Results will be partial. Add more paths to 'analysis.exclude'.",
+                "Results will be partial. Add more paths to 'analysis.exclude_also'.",
                 _MAX_FILE_COUNT,
             )
             break
