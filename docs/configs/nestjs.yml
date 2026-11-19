@@ -1,8 +1,6 @@
 # =============================================================================
 # ArchiLens example config — NestJS
 # =============================================================================
-
-
 # Written for nestjs/nest (https://github.com/nestjs/nest) at commit
 # 4410584e4ebd1cc6203fe3af0a994e6fd1399648 (master), with ArchiLens 0.18.1.
 #
@@ -27,8 +25,12 @@
 #   - packages/platform-socket.io (  5 files)
 #   - packages/platform-ws        (  4 files)
 #
-# The repo root only holds gulpfile.mjs (build tooling), so it is excluded.
-
+# The repo root holds only build and test configuration (gulpfile.mjs and
+# three vitest.config*.mts files), so it is excluded.
+# So are integration/ (29 integration-test apps), sample/ (43 sample apps),
+# scripts/ and tools/: with them, the framework's 10 packages are lost among
+# 86 modules.
+#
 # Expected result: no failures, and one "acyclic-modules" warning (see below).
 
 # External systems (Kafka, MQTT, NATS, RabbitMQ, Redis, ...) are detected from
@@ -40,8 +42,19 @@ project:
   type: "library"
 
 analysis:
+  # Setting `exclude` replaces ArchiLens's default list, so this one names
+  # everything to leave out, not only what is special to Nest.
   exclude:
+    - "**/node_modules/**"
+    - "**/dist/**"
+    - "**/*.spec.*"
+    - "**/*.test.*"
+    - "integration/**"
+    - "sample/**"
+    - "scripts/**"
+    - "tools/**"
     - "gulpfile.mjs"
+    - "vitest.config*.mts"
 
 capabilities:
   - name: "Framework core"
@@ -114,11 +127,11 @@ ci:
       to: "packages/testing/**"
       action: "fail"
 
-    # core loads the platform adapters, microservices, websockets and testing
-    # at run time with import('@nestjs/...') (NestFactory picks
-    # platform-express as the default adapter), and those packages depend on
-    # core in turn. This is by design, so it is reported as a warning, not a
-    # failure.
+    # core loads platform-express (NestFactory's default adapter),
+    # microservices and websockets at run time with import('@nestjs/...'),
+    # and those packages depend on core in turn. websockets loads
+    # platform-socket.io the same way. This is by design, so it is reported
+    # as a warning, not a failure.
     - name: "acyclic-modules"
       type: "no-cycles"
       action: "warn"
