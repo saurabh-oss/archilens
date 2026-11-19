@@ -2,7 +2,7 @@
 # ArchiLens example config — NestJS
 # =============================================================================
 # Written for nestjs/nest (https://github.com/nestjs/nest) at commit
-# 4410584e4ebd1cc6203fe3af0a994e6fd1399648 (master), with ArchiLens 0.18.1.
+# 4410584e4ebd1cc6203fe3af0a994e6fd1399648 (master), with ArchiLens 0.18.2.
 #
 # To try it: copy this file to the root of a nest checkout as
 # `.archilens.yml`, then run from that root:
@@ -42,15 +42,10 @@ project:
   type: "library"
 
 analysis:
-  # Setting `exclude` replaces ArchiLens's default list, so this one names
-  # everything to leave out, not only what is special to Nest.
-  exclude:
-    - "**/node_modules/**"
-    - "**/dist/**"
-    - "**/*.spec.*"
-    - "**/*.test.*"
+  # `exclude_also` adds to ArchiLens's defaults, which already leave out
+  # node_modules/, dist/, spec files and sample/. (`exclude` would replace them.)
+  exclude_also:
     - "integration/**"
-    - "sample/**"
     - "scripts/**"
     - "tools/**"
     - "gulpfile.mjs"

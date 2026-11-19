@@ -25,8 +25,15 @@ analysis:
 
   # Patterns to leave out, on top of what .gitignore already excludes. Patterns
   # without a leading **/ match at the repository root only.
+  #
+  # `exclude` replaces ArchiLens's default list, which is why it is written out in
+  # full here: delete a line to analyse that folder. In a config written by hand,
+  # use `exclude_also` instead: it adds to the defaults and can't lose one.
   exclude:
 {{exclude}}
+
+  # exclude_also:
+  #   - "legacy/**"
 
   # Directory levels below a source root (src/, src/main/java, a go.mod dir, ...)
   # that name an L1 module. JS/TS workspace packages are always one module each.
